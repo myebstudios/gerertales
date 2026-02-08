@@ -1,0 +1,5 @@
+{
+  "name": "GérerTales",
+  "description": "A minimalist, AI-powered co-writer app with a Nordic Studio aesthetic, featuring split-pane drafting, character management, and Gemini-powered architecture and TTS.",
+  "requestFramePermissions": []
+}
