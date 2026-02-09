@@ -34,7 +34,23 @@ export interface Story {
   toc: Chapter[];
   lastModified: number;
   coverImage?: string; // Base64 string for the cover
+  collection?: string; // Optional collection name
+  isPublic?: boolean;
+  publishedAt?: number;
+  likesCount?: number;
+  ratingAverage?: number;
+  commentsCount?: number;
 }
+
+export interface StoryComment {
+  id: string;
+  storyId: string;
+  userId: string;
+  userName: string;
+  text: string;
+  createdAt: number;
+}
+
 
 export interface Message {
   id: string;
@@ -49,6 +65,9 @@ export interface UserProfile {
   avatarColor: string;
   joinedDate: number;
   credits: number;
+  stripeCustomerId?: string;
+  subscriptionStatus?: 'active' | 'inactive' | 'past_due' | 'canceled';
+  subscriptionTier?: 'free' | 'pro' | 'studio';
 }
 
 export const AI_COSTS = {

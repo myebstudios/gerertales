@@ -4,9 +4,10 @@ import OpenAI from "openai";
 import { Chapter, Character, Location, StoryFormat } from "../types";
 
 // Defaults
-const DEFAULT_TEXT_MODEL = 'gemini-3-flash-preview';
-const DEFAULT_IMAGE_MODEL = 'gemini-2.5-flash-image';
-const DEFAULT_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+const FREE_TEXT_MODEL = 'gemini-1.5-flash';
+const PREMIUM_TEXT_MODEL = 'gemini-1.5-pro';
+const DEFAULT_IMAGE_MODEL = 'dall-e-3';
+const DEFAULT_TTS_MODEL = 'tts-1';
 
 // Rates (Credits)
 const RATE_INPUT_TOKEN = 0.001;  // 1 credit per 1000 tokens
@@ -14,12 +15,15 @@ const RATE_OUTPUT_TOKEN = 0.004; // 4 credits per 1000 tokens
 const RATE_IMAGE = 20;           // Fixed cost per image
 const RATE_TTS_CHAR = 0.01;      // 1 credit per 100 chars
 
+// Helper to check model type
+const isGeminiModel = (model: string) => model.toLowerCase().includes('gemini');
+
 // Helper to get configured AI instances and models
-const getConfig = () => {
+const getConfig = (tier: string = 'free') => {
   let settings = { 
     apiKey: '', 
     openAiApiKey: '', 
-    textModel: DEFAULT_TEXT_MODEL, 
+    textModel: tier === 'free' ? FREE_TEXT_MODEL : PREMIUM_TEXT_MODEL, 
     imageModel: DEFAULT_IMAGE_MODEL,
     imageResolution: '1K',
     ttsModel: DEFAULT_TTS_MODEL 
@@ -33,24 +37,26 @@ const getConfig = () => {
     // Ignore storage errors
   }
 
-  // Prefer user key, fallback to env for Gemini
-  const apiKey = settings.apiKey || process.env.API_KEY || 'dummy-key';
+  // Gemini Setup - Prefer user key, fallback to env (which we just updated with the new key)
+  const geminiApiKey = settings.apiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
+  const gemini = new GoogleGenAI({ apiKey: geminiApiKey });
   
-  // Initialize providers
-  const gemini = new GoogleGenAI({ apiKey });
-  
+  // OpenAI Setup - Prefer user key, fallback to env
+  const openAiApiKey = settings.openAiApiKey || import.meta.env.VITE_OPENAI_API_KEY;
   let openai: OpenAI | null = null;
-  if (settings.openAiApiKey) {
+  if (openAiApiKey) {
       openai = new OpenAI({ 
-          apiKey: settings.openAiApiKey, 
+          apiKey: openAiApiKey, 
           dangerouslyAllowBrowser: true 
       });
   }
   
+  const textModel = settings.textModel || (tier === 'free' ? FREE_TEXT_MODEL : PREMIUM_TEXT_MODEL);
+  
   return {
     gemini,
     openai,
-    textModel: settings.textModel || DEFAULT_TEXT_MODEL,
+    textModel: textModel,
     imageModel: settings.imageModel || DEFAULT_IMAGE_MODEL,
     imageResolution: settings.imageResolution || '1K',
     ttsModel: settings.ttsModel || DEFAULT_TTS_MODEL
@@ -123,8 +129,8 @@ const callOpenAIText = async (openai: OpenAI, model: string, systemPrompt: strin
 
 // -- Safety & Utilities --
 
-const createSafeImagePrompt = async (originalContext: string, type: 'COVER' | 'SCENE', tone: string): Promise<string> => {
-    const { gemini, openai, textModel } = getConfig();
+const createSafeImagePrompt = async (originalContext: string, type: 'COVER' | 'SCENE', tone: string, tier: string = 'free'): Promise<string> => {
+    const { gemini, openai, textModel } = getConfig(tier);
     const instructions = `
         You are an art director. I need a visual description for an AI image generator.
         Context: "${originalContext}"
@@ -134,7 +140,7 @@ const createSafeImagePrompt = async (originalContext: string, type: 'COVER' | 'S
     `;
 
     try {
-        if (textModel.startsWith('gpt') && openai) {
+        if (!isGeminiModel(textModel) && openai) {
             const res = await callOpenAIText(openai, textModel, "You are a helpful art director.", instructions);
             return res.content;
         } else {
@@ -170,8 +176,8 @@ const chunkText = (text: string, maxLength: number = 4000): string[] => {
 /**
  * Step 1: Analyze the spark and suggest settings.
  */
-export const analyzeStoryConcept = async (spark: string): Promise<{ data: { title: string; tone: string; recommendedChapters: number; recommendedFormat: StoryFormat }, cost: number }> => {
-  const { gemini, openai, textModel } = getConfig();
+export const analyzeStoryConcept = async (spark: string, tier: string = 'free'): Promise<{ data: { title: string; tone: string; recommendedChapters: number; recommendedFormat: StoryFormat }, cost: number }> => {
+  const { gemini, openai, textModel } = getConfig(tier);
   
   const prompt = `
     Analyze this story idea ("Spark"): "${spark}".
@@ -184,7 +190,7 @@ export const analyzeStoryConcept = async (spark: string): Promise<{ data: { titl
     }
   `;
 
-  if (textModel.startsWith('gpt') && openai) {
+  if (!isGeminiModel(textModel) && openai) {
      const systemPrompt = "You are a creative writing assistant. Respond in valid JSON.";
      const { content, cost } = await callOpenAIText(openai, textModel, systemPrompt, prompt, true);
      return { data: JSON.parse(cleanJson(content)), cost };
@@ -235,9 +241,10 @@ export const generateStoryArchitecture = async (
   spark: string, 
   title: string, 
   format: StoryFormat,
-  chapterCount: number
+  chapterCount: number,
+  tier: string = 'free'
 ): Promise<{ data: { characters: Character[]; locations: Location[]; toc: Chapter[] }, cost: number }> => {
-  const { gemini, openai, textModel } = getConfig();
+  const { gemini, openai, textModel } = getConfig(tier);
 
   const prompt = `
     Story Idea: "${spark}"
@@ -253,7 +260,7 @@ export const generateStoryArchitecture = async (
     }
   `;
 
-  if (textModel.startsWith('gpt') && openai) {
+  if (!isGeminiModel(textModel) && openai) {
      const systemPrompt = `You are a story architect. Respond in valid JSON.`;
      const { content, cost } = await callOpenAIText(openai, textModel, systemPrompt, prompt, true);
      const data = JSON.parse(cleanJson(content));
@@ -336,9 +343,9 @@ export const generateStoryArchitecture = async (
 /**
  * Step 3: Generate a cover image for the story.
  */
-export const generateCoverImage = async (title: string, tone: string, spark: string): Promise<{ url: string | undefined, cost: number }> => {
-  const { gemini, openai, imageModel, imageResolution } = getConfig();
-  const safeVisualDescription = await createSafeImagePrompt(`${spark} (Title: ${title})`, 'COVER', tone);
+export const generateCoverImage = async (title: string, tone: string, spark: string, tier: string = 'free'): Promise<{ url: string | undefined, cost: number }> => {
+  const { gemini, openai, imageModel, imageResolution } = getConfig(tier);
+  const safeVisualDescription = await createSafeImagePrompt(`${spark} (Title: ${title})`, 'COVER', tone, tier);
 
   try {
     let url: string | undefined;
@@ -390,10 +397,10 @@ export const generateCoverImage = async (title: string, tone: string, spark: str
 /**
  * Step 4: Generate a banner image for a chapter.
  */
-export const generateChapterBanner = async (chapterTitle: string, chapterSummary: string, storyTitle: string, tone: string): Promise<{ url: string | undefined, cost: number }> => {
-  const { gemini, openai, imageModel, imageResolution } = getConfig();
+export const generateChapterBanner = async (chapterTitle: string, chapterSummary: string, storyTitle: string, tone: string, tier: string = 'free'): Promise<{ url: string | undefined, cost: number }> => {
+  const { gemini, openai, imageModel, imageResolution } = getConfig(tier);
   const context = `Story: ${storyTitle}\nChapter: ${chapterTitle}\nSummary: ${chapterSummary}`;
-  const safeVisualDescription = await createSafeImagePrompt(context, 'SCENE', tone);
+  const safeVisualDescription = await createSafeImagePrompt(context, 'SCENE', tone, tier);
 
   try {
     let url: string | undefined;
@@ -449,9 +456,10 @@ export const generateProse = async (
   history: { role: string; text: string }[],
   currentChapter: Chapter,
   format: StoryFormat,
-  instruction: string
+  instruction: string,
+  tier: string = 'free'
 ): Promise<{ text: string, cost: number }> => {
-  const { gemini, openai, textModel } = getConfig();
+  const { gemini, openai, textModel } = getConfig(tier);
 
   const context = `
     Current Chapter: ${currentChapter.title}
@@ -473,7 +481,7 @@ export const generateProse = async (
     Output ONLY the story content.
   `;
 
-  if (textModel.startsWith('gpt') && openai) {
+  if (!isGeminiModel(textModel) && openai) {
       const messages: any[] = history.map(msg => ({
           role: msg.role === 'model' ? 'assistant' : 'user',
           content: msg.text
@@ -510,8 +518,8 @@ export const generateProse = async (
 /**
  * TTS: Generate speech.
  */
-export const generateSpeech = async (text: string, voiceName: string = 'Kore'): Promise<{ audio: AudioBuffer | null, cost: number }> => {
-  const { gemini, openai, ttsModel } = getConfig();
+export const generateSpeech = async (text: string, voiceName: string = 'Kore', tier: string = 'free'): Promise<{ audio: AudioBuffer | null, cost: number }> => {
+  const { gemini, openai, ttsModel } = getConfig(tier);
   const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
   const textChunks = chunkText(text, 3500); 
   const audioBuffers: AudioBuffer[] = [];
@@ -523,7 +531,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore'): 
     for (const chunk of textChunks) {
         let chunkBuffer: AudioBuffer | null = null;
 
-        if (ttsModel.startsWith('tts') && openai) {
+        if (!isGeminiModel(ttsModel) && openai) {
             const openAIVoiceMap: Record<string, string> = { 'Kore': 'alloy', 'Puck': 'echo', 'Charon': 'fable', 'Fenrir': 'onyx', 'Zephyr': 'nova' };
             const response = await openai.audio.speech.create({
                 model: ttsModel,

@@ -1,8 +1,14 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { AppState, Story, Message, Chapter, StoryConfig, StoryBlueprintData, UserProfile, AppSettings } from './types';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
+import { Story, Message, StoryConfig, StoryBlueprintData, UserProfile, AppSettings } from './types';
 import * as GeminiService from './services/geminiService';
 import { applyTheme } from './services/themeService';
+import { supabaseService } from './services/supabaseService';
+import { supabase } from './services/supabaseClient';
+import { User } from '@supabase/supabase-js';
+import { analytics } from './services/analyticsService';
+
 import Onboarding from './components/Onboarding';
 import ChatInterface from './components/ChatInterface';
 import StoryBlueprint from './components/StoryBlueprint';
@@ -11,59 +17,81 @@ import AppNavigation from './components/AppNavigation';
 import StoryLibrary from './components/StoryLibrary';
 import UserProfileView from './components/UserProfileView';
 import SettingsView from './components/SettingsView';
+import Auth from './components/Auth';
+import LandingPage from './components/LandingPage';
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   // Load initial state
-  const [stories, setStories] = useState<Story[]>(() => {
-    try {
-      const saved = localStorage.getItem('gerertales_stories');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+  const [stories, setStories] = useState<Story[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    name: "Guest Writer",
+    bio: "A traveler in the realm of imagination.",
+    avatarColor: "#60A5FA",
+    joinedDate: Date.now(),
+    credits: 50,
+    subscriptionTier: 'free'
   });
 
-  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
-    try {
-        const saved = localStorage.getItem('gerertales_profile');
-        if (saved) return JSON.parse(saved);
-    } catch {}
-    
-    // Default Profile
-    return {
-        name: "Guest Writer",
-        bio: "A traveler in the realm of imagination.",
-        avatarColor: "#60A5FA",
-        joinedDate: Date.now(),
-        credits: 50 // Default starting credits
-    };
-  });
-
-  const [appState, setAppState] = useState<AppState>(AppState.LIBRARY);
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   
-  // Track generation status to prevent duplicate requests
-  const generatingBannersRef = useRef<Set<string>>(new Set());
-
-  // Persistence Effects
+  // Auth listener
   useEffect(() => {
-    try {
-        localStorage.setItem('gerertales_stories', JSON.stringify(stories));
-    } catch (e) {
-        console.warn("Storage Quota Exceeded: Could not save stories locally.", e);
-        // In a real app, we might switch to IndexedDB or alert the user.
-    }
-  }, [stories]);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Sync Data on Auth Change
   useEffect(() => {
-    try {
-        localStorage.setItem('gerertales_profile', JSON.stringify(userProfile));
-    } catch (e) {
-        console.warn("Could not save profile locally.", e);
-    }
-  }, [userProfile]);
+    const syncData = async () => {
+        if (user) {
+            // Fetch from Supabase
+            const profile = await supabaseService.getProfile(user.id);
+            if (profile) {
+                setUserProfile(profile);
+                if (['/', '/auth'].includes(location.pathname)) {
+                    navigate('/library');
+                }
+            } else {
+                // Initialize profile in Supabase if new user
+                await supabaseService.updateProfile(user.id, userProfile);
+                navigate('/library');
+            }
+
+            const cloudStories = await supabaseService.getStories(user.id);
+            setStories(cloudStories);
+        } else {
+            // Load from localStorage as guest
+            try {
+                const savedStories = localStorage.getItem('gerertales_stories');
+                if (savedStories) setStories(JSON.parse(savedStories));
+                
+                const savedProfile = localStorage.getItem('gerertales_profile');
+                if (savedProfile) setUserProfile(JSON.parse(savedProfile));
+            } catch (e) {
+                console.warn("Failed to load guest data", e);
+            }
+        }
+    };
+
+    syncData();
+  }, [user]);
 
   // Theme Application Effect
   useEffect(() => {
@@ -82,12 +110,12 @@ const App: React.FC = () => {
       } catch (e) {
           applyTheme('nordic-dark');
       }
-  }, [appState]);
+  }, [location.pathname]);
 
   const currentStory = stories.find(s => s.id === activeStoryId);
+  const userTier = userProfile.subscriptionTier || 'free';
 
   // -- Credit Management Helper --
-  // Checks if user has positive balance to start
   const hasCredits = (): boolean => {
       if (userProfile.credits <= 0) {
           alert("You have run out of credits. Please add more in Settings to continue.");
@@ -96,120 +124,38 @@ const App: React.FC = () => {
       return true;
   };
 
-  // Deducts exact cost after operation
   const deductCredits = (cost: number, featureName: string) => {
       const newBalance = Math.max(0, parseFloat((userProfile.credits - cost).toFixed(2)));
-      console.log(`[Credits] Action: ${featureName} | Cost: ${cost} | Balance: ${newBalance}`);
-      
-      setUserProfile(prev => ({
-          ...prev,
-          credits: newBalance
-      }));
+      const updatedProfile = { ...userProfile, credits: newBalance };
+      setUserProfile(updatedProfile);
+      if (user) supabaseService.updateProfile(user.id, updatedProfile);
   };
 
-  const handleUpdateCredits = (newAmount: number) => {
-      setUserProfile(prev => ({
-          ...prev,
-          credits: newAmount
-      }));
-  };
-
-
-  // -- Navigation --
-
-  const handleNavigate = (state: AppState) => {
-    setAppState(state);
-    if (state === AppState.LIBRARY || state === AppState.ONBOARDING || state === AppState.PROFILE || state === AppState.SETTINGS) {
-      setActiveStoryId(null);
-      setMessages([]);
-    }
-  };
-
+  // -- Navigation Handlers --
   const handleSelectStory = (story: Story) => {
     setActiveStoryId(story.id);
-    setAppState(AppState.WRITING);
-    // Restore or Init Chat.
     setMessages([{
         id: 'restore',
         role: 'model',
         text: `Welcome back to "${story.title}". We are currently at Chapter ${story.activeChapterIndex + 1}.`
     }]);
+    navigate(`/writing/${story.id}`);
   };
 
   const handleDeleteStory = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (window.confirm("Are you sure you want to delete this story? This cannot be undone.")) {
+    if (window.confirm("Are you sure you want to delete this story?")) {
       setStories(prev => prev.filter(s => s.id !== id));
-      if (activeStoryId === id) {
-        setAppState(AppState.LIBRARY);
-        setActiveStoryId(null);
-        setMessages([]);
-      }
+      if (user) supabaseService.deleteStory(user.id, id);
     }
   };
 
-  const handleBackupStory = (story: Story, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const latestStoryVersion = stories.find(s => s.id === story.id) || story;
-    const data = JSON.stringify(latestStoryVersion, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${latestStoryVersion.title.replace(/\s+/g, '_')}.gtale`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleImportStory = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const content = e.target?.result as string;
-            const importedStory = JSON.parse(content) as Story;
-            if (!importedStory.title || !importedStory.toc) throw new Error("Invalid format");
-
-            const newStory = {
-                ...importedStory,
-                id: crypto.randomUUID(),
-                title: `${importedStory.title} (Imported)`,
-                lastModified: Date.now()
-            };
-
-            setStories(prev => [newStory, ...prev]);
-            alert(`Imported "${newStory.title}" successfully.`);
-        } catch (error) {
-            console.error(error);
-            alert("Failed to import story. Invalid file format.");
-        }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleUpdateProfile = (newProfile: UserProfile) => {
-      setUserProfile(newProfile);
-  };
-
-  const handleSettingsSave = () => {
-       const savedSettings = localStorage.getItem('gerertales_settings');
-        if (savedSettings) {
-            const settings: AppSettings = JSON.parse(savedSettings);
-            applyTheme(settings.theme);
-        }
-      alert('Settings saved successfully.');
-  };
-
   // -- AI Logic --
-
   const handleCreateStory = async (config: StoryConfig, blueprint: StoryBlueprintData) => {
     setIsAiProcessing(true);
-    setAppState(AppState.ARCHITECTING);
     try {
       const newStoryId = crypto.randomUUID();
-
       const newStory: Story = {
         id: newStoryId,
         title: config.title,
@@ -224,38 +170,28 @@ const App: React.FC = () => {
       };
 
       setStories(prev => [newStory, ...prev]);
+      if (user) supabaseService.saveStory(user.id, newStory);
       setActiveStoryId(newStoryId);
       
       setMessages([{
         id: 'init',
         role: 'model',
-        text: `I've initialized the ${config.format} blueprint for "${config.title}". Shall we start writing Chapter 1?`
+        text: `I've initialized the ${config.format} blueprint for "${config.title}". Shall we start?`
       }]);
-      setAppState(AppState.WRITING);
+      
+      navigate(`/writing/${newStoryId}`);
 
       // Background Cover Generation
       (async () => {
-          try {
-             if (hasCredits()) {
-                 try {
-                    const { url, cost } = await GeminiService.generateCoverImage(config.title, config.tone, config.spark);
-                    if (url) {
-                        setStories(prev => prev.map(s => s.id === newStoryId ? { ...s, coverImage: url } : s));
-                        deductCredits(cost, "Cover Image");
-                    }
-                 } catch (e) {
-                     console.warn("Cover generation failed", e);
-                 }
-             }
-          } catch (bgError) {
-              console.error("Critical background generation error:", bgError);
+          const { url, cost } = await GeminiService.generateCoverImage(config.title, config.tone, config.spark, userTier);
+          if (url) {
+              setStories(prev => prev.map(s => s.id === newStoryId ? { ...s, coverImage: url } : s));
+              deductCredits(cost, "Cover Image");
           }
       })();
 
     } catch (error) {
-      console.error("Failed to generate story:", error);
-      setAppState(AppState.ONBOARDING);
-      alert("The Architect couldn't parse your idea. Please try again.");
+      alert("The Architect couldn't parse your idea.");
     } finally {
       setIsAiProcessing(false);
     }
@@ -263,99 +199,45 @@ const App: React.FC = () => {
 
   const handleSendMessage = async (text: string) => {
     if (!currentStory) return;
-
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text };
-    const updatedMessages = [...messages, userMsg];
-    setMessages(updatedMessages);
+    setMessages(prev => [...prev, userMsg]);
     setIsAiProcessing(true);
 
     try {
       if (!hasCredits()) {
-           setMessages(prev => [...prev, {
-              id: crypto.randomUUID(),
-              role: 'model',
-              text: "Insufficient credits to proceed."
-          }]);
           setIsAiProcessing(false);
           return;
       }
 
       const currentChapter = currentStory.toc[currentStory.activeChapterIndex];
-      const isRequestingProse = text.toLowerCase().includes('write') || 
-                                text.toLowerCase().includes('describe') || 
-                                text.toLowerCase().includes('scene') ||
-                                currentChapter.content.length < 50;
+      const isProse = text.toLowerCase().includes('write') || currentChapter.content.length < 50;
 
-      if (isRequestingProse) {
-        // Generate Prose
+      if (isProse) {
         const { text: prose, cost } = await GeminiService.generateProse(
-            updatedMessages.map(m => ({role: m.role, text: m.text})), 
+            messages.concat(userMsg).map(m => ({role: m.role, text: m.text})), 
             currentChapter,
             currentStory.format,
-            text
+            text,
+            userTier
         );
-        
         deductCredits(cost, "Prose Generation");
-
-        const updatedChapters = [...currentStory.toc];
-        updatedChapters[currentStory.activeChapterIndex] = {
-            ...currentChapter,
-            content: currentChapter.content ? `${currentChapter.content}\n\n${prose}` : prose
-        };
-
-        const updatedStory = {
-            ...currentStory,
-            toc: updatedChapters,
-            lastModified: Date.now()
-        };
-
-        setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
-
-        setMessages(prev => [...prev, {
-            id: crypto.randomUUID(),
-            role: 'model',
-            text: "I've added that to the draft. How does it feel?"
-        }]);
-
+        handleContentUpdate(currentChapter.content ? `${currentChapter.content}\n\n${prose}` : prose);
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: "I've added that to the draft. How does it feel?" }]);
       } else {
-        // Chat
         const { text: response, cost } = await GeminiService.generateProse(
-            updatedMessages.map(m => ({role: m.role, text: m.text})),
+            messages.concat(userMsg).map(m => ({role: m.role, text: m.text})),
             currentChapter,
             currentStory.format,
-            "Provide brief advice or answer the user's question about the story direction. Do not write prose."
+            "Provide brief advice. Do not write prose.",
+            userTier
         );
-        
         deductCredits(cost, "Chat");
-
-         setMessages(prev => [...prev, {
-            id: crypto.randomUUID(),
-            role: 'model',
-            text: response
-        }]);
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: response }]);
       }
-
     } catch (error) {
-      console.error(error);
-      setMessages(prev => [...prev, {
-          id: crypto.randomUUID(),
-          role: 'model',
-          text: "I'm having trouble connecting to the muse (API Error)."
-      }]);
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: "Connection error." }]);
     } finally {
       setIsAiProcessing(false);
-    }
-  };
-
-  const handleChapterSelect = (index: number) => {
-    if (currentStory) {
-        const updatedStory = { ...currentStory, activeChapterIndex: index };
-        setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
-        setMessages(prev => [...prev, {
-            id: crypto.randomUUID(),
-            role: 'model',
-            text: `Switched focus to Chapter ${index + 1}: ${updatedStory.toc[index].title}.`
-        }]);
     }
   };
 
@@ -365,97 +247,110 @@ const App: React.FC = () => {
         updatedChapters[currentStory.activeChapterIndex].content = newContent;
         const updatedStory = { ...currentStory, toc: updatedChapters, lastModified: Date.now() };
         setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
+        if (user) supabaseService.saveStory(user.id, updatedStory);
     }
   };
 
-  const handleChapterUpdate = (chapterIndex: number, updates: Partial<Chapter>) => {
-    if (currentStory) {
-        const updatedChapters = [...currentStory.toc];
-        updatedChapters[chapterIndex] = { ...updatedChapters[chapterIndex], ...updates };
-        const updatedStory = { ...currentStory, toc: updatedChapters, lastModified: Date.now() };
-        setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
-    }
-  };
+  if (authLoading) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted">Loading Studio...</div>;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-dark-bg text-text-main transition-colors duration-300">
-      <AppNavigation 
-        currentState={appState} 
-        onNavigate={handleNavigate}
-        userProfile={userProfile}
-      />
-      <div className="flex-1 flex h-full overflow-hidden relative">
-        {appState === AppState.LIBRARY && (
-          <StoryLibrary 
-            stories={stories}
-            onSelectStory={handleSelectStory}
-            onCreateNew={() => setAppState(AppState.ONBOARDING)}
-            onDeleteStory={handleDeleteStory}
-            onImportStory={handleImportStory}
-            onBackupStory={handleBackupStory}
-          />
-        )}
-        {appState === AppState.PROFILE && (
+    <div className={`flex h-screen w-screen bg-dark-bg text-text-main transition-all duration-500 ${focusMode ? 'focus-mode' : ''}`}>
+      {!focusMode && !['/auth', '/'].includes(location.pathname) && (
+        <AppNavigation 
+            userProfile={userProfile}
+            user={user}
+            onLogin={() => navigate('/auth')}
+        />
+      )}
+      
+      <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings'].includes(location.pathname) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
+        <Routes>
+          <Route path="/" element={user ? <Navigate to="/library" /> : <LandingPage />} />
+          <Route path="/auth" element={user ? <Navigate to="/library" /> : <Auth />} />
+          
+          <Route path="/library" element={
+            <StoryLibrary 
+              stories={stories}
+              onSelectStory={handleSelectStory}
+              onCreateNew={() => navigate('/onboarding')}
+              onDeleteStory={handleDeleteStory}
+              onImportStory={() => {}}
+              onBackupStory={() => {}}
+            />
+          } />
+
+          <Route path="/onboarding" element={
+            <Onboarding 
+                onConfirm={handleCreateStory} 
+                isLoading={isAiProcessing} 
+                onCheckCredits={hasCredits}
+                onDeductCredits={deductCredits}
+                userTier={userTier}
+             />
+          } />
+
+          <Route path="/writing/:storyId" element={
+            currentStory ? (
+                <>
+                    {!focusMode && (
+                        <div className="w-full md:w-2/5 h-full z-10 border-r border-dark-border flex-shrink-0">
+                            <ChatInterface 
+                                messages={messages} 
+                                onSendMessage={handleSendMessage}
+                                isTyping={isAiProcessing}
+                                chapterTitle={currentStory.toc[currentStory.activeChapterIndex]?.title || 'Untitled'}
+                            />
+                        </div>
+                    )}
+                    <div className={`${focusMode ? 'w-full' : 'w-full md:w-3/5'} h-full relative`}>
+                        <StoryBlueprint 
+                            story={currentStory} 
+                            currentChapterIndex={currentStory.activeChapterIndex}
+                            onChapterSelect={(idx) => {
+                                const updated = { ...currentStory, activeChapterIndex: idx };
+                                setStories(prev => prev.map(s => s.id === updated.id ? updated : s));
+                                if (user) supabaseService.saveStory(user.id, updated);
+                            }}
+                            onContentUpdate={handleContentUpdate}
+                            checkCredits={hasCredits}
+                            deductCredits={deductCredits}
+                            focusMode={focusMode}
+                            onToggleFocus={() => setFocusMode(!focusMode)}
+                        />
+                    </div>
+                </>
+            ) : <Navigate to="/library" />
+          } />
+
+          <Route path="/profile" element={
             <UserProfileView 
                 profile={userProfile}
                 stories={stories}
-                onUpdateProfile={handleUpdateProfile}
+                onUpdateProfile={setUserProfile}
+                user={user}
+                onLogout={() => { supabaseService.signOut(); navigate('/auth'); }}
             />
-        )}
-        {appState === AppState.SETTINGS && (
+          } />
+
+          <Route path="/settings" element={
             <SettingsView 
-                onSave={handleSettingsSave}
-                onCancel={() => handleNavigate(AppState.LIBRARY)}
+                onSave={() => {}}
+                onCancel={() => navigate('/library')}
                 userProfile={userProfile}
-                onUpdateCredits={handleUpdateCredits}
+                onUpdateCredits={(amt) => {
+                    const updated = { ...userProfile, credits: amt };
+                    setUserProfile(updated);
+                    if (user) supabaseService.updateProfile(user.id, updated);
+                }}
+                user={user}
             />
-        )}
-        {(appState === AppState.ONBOARDING || appState === AppState.ARCHITECTING) && (
-          <div className="w-full h-full">
-             <Onboarding 
-                onConfirm={handleCreateStory} 
-                isLoading={appState === AppState.ARCHITECTING} 
-                onCheckCredits={hasCredits}
-                onDeductCredits={deductCredits}
-             />
-          </div>
-        )}
-        {appState === AppState.WRITING && currentStory && (
-            <>
-                <div className="w-full md:w-2/5 h-full z-10 shadow-xl md:shadow-none border-r border-dark-border flex-shrink-0">
-                <ChatInterface 
-                    messages={messages} 
-                    onSendMessage={handleSendMessage}
-                    isTyping={isAiProcessing}
-                    chapterTitle={currentStory.toc[currentStory.activeChapterIndex]?.title || 'Untitled'}
-                />
-                </div>
-                <div className="hidden md:block md:w-3/5 h-full relative">
-                    <StoryBlueprint 
-                        story={currentStory} 
-                        currentChapterIndex={currentStory.activeChapterIndex}
-                        onChapterSelect={handleChapterSelect}
-                        onContentUpdate={handleContentUpdate}
-                        onChapterUpdate={handleChapterUpdate}
-                        onExport={() => {}}
-                        checkCredits={hasCredits}
-                        deductCredits={deductCredits}
-                    />
-                    <ContextSidebar 
-                        characters={currentStory.characters} 
-                        locations={currentStory.locations}
-                        tone={currentStory.tone} 
-                        toc={currentStory.toc}
-                        activeChapterIndex={currentStory.activeChapterIndex}
-                        onJumpToChapter={handleChapterSelect}
-                    />
-                </div>
-            </>
-        )}
+          } />
+
+          <Route path="*" element={<Navigate to={user ? "/library" : "/auth"} />} />
+        </Routes>
       </div>
     </div>
   );
 };
 
 export default App;
-

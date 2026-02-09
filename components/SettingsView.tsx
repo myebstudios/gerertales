@@ -1,12 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { AppSettings, Theme, TTSProvider, UserProfile } from '../types';
+import SubscriptionPlans from './SubscriptionPlans';
+import { User } from '@supabase/supabase-js';
+import { supabase } from '../services/supabaseClient';
 
 interface SettingsViewProps {
   onSave: (settings: AppSettings) => void;
   onCancel: () => void;
   userProfile?: UserProfile;
   onUpdateCredits?: (amount: number) => void;
+  user: User | null;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -20,7 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'nordic-dark'
 };
 
-const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfile, onUpdateCredits }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfile, onUpdateCredits, user }) => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [showKey, setShowKey] = useState(false);
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
@@ -43,266 +47,221 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
 
   const handleSave = () => {
     localStorage.setItem('gerertales_settings', JSON.stringify(settings));
-    // Save credits if changed
     if (onUpdateCredits && creditsInput !== userProfile?.credits) {
         onUpdateCredits(creditsInput);
     }
     onSave(settings);
   };
 
+  const handleTopUp = async (amount: number) => {
+      // In a real app, this would trigger a Stripe Checkout for a specific amount of credits
+      alert(`Initiating top-up for ${amount} credits... (Redirecting to Stripe)`);
+      try {
+          const { data, error } = await supabase.functions.invoke('create-credit-topup', {
+              body: { amount, userId: user?.id }
+          });
+          if (data?.url) window.location.href = data.url;
+      } catch (e) {
+          console.error(e);
+      }
+  };
+
   return (
-    <div className="flex-1 h-full bg-dark-bg p-8 md:p-12 overflow-y-auto animate-in fade-in duration-300">
-      <div className="max-w-2xl mx-auto space-y-12">
-        <div>
-          <h1 className="text-3xl font-serif text-text-main font-medium mb-4">Settings</h1>
-          <p className="text-text-muted font-sans text-sm">Configure the AI models, voice engines, and aesthetics for your studio.</p>
+    <div className="flex-1 h-full bg-dark-bg p-8 md:p-16 overflow-y-auto animate-in fade-in duration-500 no-scrollbar">
+      <div className="max-w-4xl mx-auto space-y-20 pb-32">
+        
+        {/* Header */}
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="text-4xl font-serif text-text-main font-medium tracking-tight">Studio Settings</h1>
+            <p className="text-text-muted font-sans text-lg mt-2">Personalize your writing environment and AI preferences.</p>
+          </div>
+          <div className="flex gap-4">
+              <button onClick={onCancel} className="px-8 py-3 rounded-2xl text-sm font-bold text-zinc-500 hover:text-white transition-all">Cancel</button>
+              <button onClick={handleSave} className="px-10 py-3 rounded-2xl text-sm font-black uppercase tracking-widest bg-cobalt text-white shadow-xl shadow-cobalt/20 hover:bg-blue-500 transition-all active:scale-95">Save Profile</button>
+          </div>
         </div>
 
-        <div className="space-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            
+            {/* Left Column: Account & Credits */}
+            <div className="lg:col-span-1 space-y-10">
+                <section className="space-y-6">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 border-b border-dark-border pb-3">Your Account</h3>
+                    
+                    <div className="bg-dark-surface border border-dark-border rounded-[2rem] p-8 space-y-6 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-cobalt/5 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-cobalt/10 transition-all duration-700" />
+                        
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-zinc-800 border border-white/5 flex items-center justify-center text-xl font-black text-cobalt shadow-inner" style={{ backgroundColor: userProfile?.avatarColor + '20', color: userProfile?.avatarColor }}>
+                                {userProfile?.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h4 className="font-serif text-lg text-white">{userProfile?.name}</h4>
+                                <p className="text-xs text-zinc-500">{user?.email}</p>
+                            </div>
+                        </div>
 
-           {/* User Credits Section (Testing) */}
-           <div className="bg-dark-surface border border-dark-border rounded-xl p-6 space-y-4 shadow-lg">
-             <div className="flex items-start justify-between">
-                <div>
-                    <h3 className="text-sm font-bold text-text-main uppercase tracking-widest">AI Credits</h3>
-                    <p className="text-xs text-zinc-500 mt-1">Manage your credit balance for AI features.</p>
-                </div>
-                <div className="px-2 py-1 bg-yellow-500/10 text-yellow-500 text-[10px] font-bold uppercase rounded border border-yellow-500/20">
-                    Testing Mode
-                </div>
-             </div>
-             
-             <div className="flex items-center gap-4">
-                <input 
-                    type="number"
-                    value={creditsInput}
-                    onChange={(e) => setCreditsInput(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-32 bg-zinc-800 border border-dark-border rounded-lg p-3 text-sm text-text-main focus:border-cobalt outline-none font-mono text-center"
-                />
-                <span className="text-sm text-zinc-500">Current Balance: <span className="text-cobalt font-bold">{userProfile?.credits || 0}</span></span>
-             </div>
-             <p className="text-xs text-zinc-600 italic">Adjust this value to simulate purchasing or using credits.</p>
-          </div>
-          
-          {/* Theme Section */}
-           <div className="bg-dark-surface border border-dark-border rounded-xl p-6 space-y-4 shadow-lg">
-             <div className="flex items-start justify-between">
-                <div>
-                    <h3 className="text-sm font-bold text-text-main uppercase tracking-widest">Studio Theme</h3>
-                    <p className="text-xs text-zinc-500 mt-1">Customize your writing environment.</p>
-                </div>
-             </div>
-             
-             <div className="grid grid-cols-3 gap-3">
-                 {[
-                     { id: 'nordic-dark', label: 'Nordic Night', color: '#18181b' },
-                     { id: 'midnight', label: 'Midnight', color: '#0f172a' },
-                     { id: 'paper-light', label: 'Paper & Ink', color: '#faf9f6' }
-                 ].map(theme => (
-                     <button
-                        key={theme.id}
-                        onClick={() => handleChange('theme', theme.id as Theme)}
-                        className={`p-3 rounded-lg border flex items-center gap-3 transition-all
-                        ${settings.theme === theme.id 
-                            ? 'border-cobalt bg-cobalt/10' 
-                            : 'border-dark-border hover:bg-zinc-800/50'}`}
-                     >
-                         <div className="w-6 h-6 rounded-full border border-dark-border" style={{ backgroundColor: theme.color }}></div>
-                         <span className={`text-sm font-medium ${settings.theme === theme.id ? 'text-cobalt' : 'text-text-main'}`}>
-                             {theme.label}
-                         </span>
-                     </button>
-                 ))}
-             </div>
-          </div>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                                <span>Current Credits</span>
+                                <span className="text-cobalt">{userProfile?.credits || 0} / 500</span>
+                            </div>
+                            <div className="h-2 w-full bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                                <div 
+                                    className="h-full bg-cobalt transition-all duration-1000 ease-out shadow-[0_0_10px_var(--color-cobalt)]" 
+                                    style={{ width: `${Math.min(100, ((userProfile?.credits || 0) / 500) * 100)}%` }} 
+                                />
+                            </div>
+                        </div>
 
-          {/* Google API Key Section */}
-          <div className="bg-dark-surface border border-dark-border rounded-xl p-6 space-y-4 shadow-lg">
-             <div className="flex items-start justify-between">
-                <div>
-                    <h3 className="text-sm font-bold text-text-main uppercase tracking-widest">Google Gemini API Key</h3>
-                    <p className="text-xs text-zinc-500 mt-1">Leave empty to use the hosted default key (if available).</p>
-                </div>
-                <div className="px-2 py-1 bg-cobalt/10 text-cobalt text-[10px] font-bold uppercase rounded border border-cobalt/20">
-                    Secure Storage
-                </div>
-             </div>
-             
-             <div className="relative">
-                <input 
-                    type={showKey ? "text" : "password"}
-                    value={settings.apiKey}
-                    onChange={(e) => handleChange('apiKey', e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-zinc-800 border border-dark-border rounded-lg p-3 text-sm text-text-main focus:border-cobalt outline-none font-mono"
-                />
-                <button 
-                    onClick={() => setShowKey(!showKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-text-main text-xs uppercase font-bold"
-                >
-                    {showKey ? 'Hide' : 'Show'}
-                </button>
-             </div>
-          </div>
-
-          {/* OpenAI API Key Section */}
-          <div className="bg-dark-surface border border-dark-border rounded-xl p-6 space-y-4 shadow-lg">
-             <div className="flex items-start justify-between">
-                <div>
-                    <h3 className="text-sm font-bold text-text-main uppercase tracking-widest">OpenAI API Key</h3>
-                    <p className="text-xs text-zinc-500 mt-1">Required for GPT-4o, DALL-E 3, and OpenAI Voices.</p>
-                </div>
-             </div>
-             
-             <div className="relative">
-                <input 
-                    type={showOpenAiKey ? "text" : "password"}
-                    value={settings.openAiApiKey || ''}
-                    onChange={(e) => handleChange('openAiApiKey', e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full bg-zinc-800 border border-dark-border rounded-lg p-3 text-sm text-text-main focus:border-cobalt outline-none font-mono"
-                />
-                <button 
-                    onClick={() => setShowOpenAiKey(!showOpenAiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-text-main text-xs uppercase font-bold"
-                >
-                    {showOpenAiKey ? 'Hide' : 'Show'}
-                </button>
-             </div>
-          </div>
-
-          {/* Models Configuration */}
-          <div className="space-y-6">
-             <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest border-b border-dark-border pb-2">Model Configuration</h3>
-             
-             {/* Text Model */}
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                <label className="text-sm text-text-main font-medium">Co-Writer Model</label>
-                <div className="md:col-span-2">
-                    <select 
-                        value={settings.textModel}
-                        onChange={(e) => handleChange('textModel', e.target.value)}
-                        className="w-full bg-zinc-800 border border-dark-border rounded-lg p-3 text-sm text-text-main focus:border-cobalt outline-none appearance-none"
-                    >
-                        <optgroup label="Google Gemini">
-                            <option value="gemini-3-flash-preview">Gemini 3.0 Flash (Fastest)</option>
-                            <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Best Reasoning)</option>
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                        </optgroup>
-                        <optgroup label="OpenAI">
-                            <option value="gpt-4o">GPT-4o</option>
-                            <option value="gpt-4o-mini">GPT-4o Mini</option>
-                        </optgroup>
-                    </select>
-                </div>
-             </div>
-
-             {/* Image Model & Resolution */}
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                <label className="text-sm text-text-main font-medium mt-3">Illustrator</label>
-                <div className="md:col-span-2 space-y-3">
-                    <select 
-                        value={settings.imageModel}
-                        onChange={(e) => handleChange('imageModel', e.target.value)}
-                        className="w-full bg-zinc-800 border border-dark-border rounded-lg p-3 text-sm text-text-main focus:border-cobalt outline-none appearance-none"
-                    >
-                        <optgroup label="Google Gemini">
-                            <option value="gemini-2.5-flash-image">Gemini 2.5 Flash Image (Standard)</option>
-                            <option value="gemini-3-pro-image-preview">Gemini 3.0 Pro Image (High Quality)</option>
-                        </optgroup>
-                        <optgroup label="OpenAI">
-                            <option value="dall-e-3">DALL-E 3</option>
-                        </optgroup>
-                    </select>
-
-                    <div className="flex gap-2 flex-wrap">
-                         <span className="text-xs text-zinc-500 self-center">Resolution:</span>
-                         <div className="flex gap-1 flex-1">
-                             {['Low', '1K', '2K', '4K'].map(res => {
-                                 // Logic: Low/1K always available. 2K/4K only for Pro.
-                                 const isPro = settings.imageModel === 'gemini-3-pro-image-preview';
-                                 const disabled = (res === '2K' || res === '4K') && !isPro;
-                                 
-                                 return (
-                                    <button
-                                        key={res}
-                                        onClick={() => handleChange('imageResolution', res)}
-                                        className={`flex-1 py-1.5 text-[10px] md:text-xs font-bold rounded-md transition-all border border-dark-border 
-                                            ${settings.imageResolution === res ? 'bg-zinc-700 text-cobalt border-cobalt' : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300'}
-                                            ${disabled ? 'opacity-30 cursor-not-allowed' : ''}
-                                        `}
-                                        disabled={disabled}
-                                        title={disabled ? 'Only available for Gemini 3.0 Pro Image' : res === 'Low' ? 'Reduces storage usage (512px)' : ''}
-                                    >
-                                        {res === 'Low' ? 'Low (Saver)' : res}
-                                    </button>
-                                 );
-                             })}
-                         </div>
-                    </div>
-                </div>
-             </div>
-
-             {/* TTS Configuration */}
-             <div className="space-y-4 pt-4 border-t border-dark-border">
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                    <label className="text-sm text-text-main font-medium">Voice Engine</label>
-                    <div className="md:col-span-2 flex gap-2 p-1 bg-zinc-800 rounded-lg border border-dark-border">
                         <button 
-                            onClick={() => handleChange('ttsProvider', 'ai')}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${settings.ttsProvider === 'ai' ? 'bg-cobalt text-white shadow-sm' : 'text-zinc-400 hover:text-text-main'}`}
+                            onClick={() => document.getElementById('subscriptions')?.scrollIntoView({ behavior: 'smooth' })}
+                            className="w-full py-4 rounded-2xl bg-white/5 border border-white/5 text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all active:scale-95"
                         >
-                            AI Neural (High Quality)
-                        </button>
-                        <button 
-                            onClick={() => handleChange('ttsProvider', 'browser')}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${settings.ttsProvider === 'browser' ? 'bg-cobalt text-white shadow-sm' : 'text-zinc-400 hover:text-text-main'}`}
-                        >
-                            Browser (Offline)
+                            Manage Subscription
                         </button>
                     </div>
-                 </div>
+                </section>
 
-                 {settings.ttsProvider === 'ai' && (
-                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center animate-fade-in">
-                        <label className="text-sm text-text-main font-medium">AI Narrator Model</label>
-                        <div className="md:col-span-2">
-                            <select 
-                                value={settings.ttsModel}
-                                onChange={(e) => handleChange('ttsModel', e.target.value)}
-                                className="w-full bg-zinc-800 border border-dark-border rounded-lg p-3 text-sm text-text-main focus:border-cobalt outline-none appearance-none"
+                <section className="space-y-6">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 border-b border-dark-border pb-3">Quick Top-up</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                        {[
+                            { amount: 100, price: '$5' },
+                            { amount: 500, price: '$20', popular: true }
+                        ].map(pkg => (
+                            <button 
+                                key={pkg.amount}
+                                onClick={() => handleTopUp(pkg.amount)}
+                                className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-1 group active:scale-95
+                                ${pkg.popular ? 'bg-cobalt/5 border-cobalt/20' : 'bg-dark-surface border-dark-border hover:border-zinc-700'}`}
                             >
-                                <optgroup label="Google Gemini">
-                                    <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS</option>
+                                <span className={`text-lg font-black ${pkg.popular ? 'text-cobalt' : 'text-white'}`}>{pkg.amount}</span>
+                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Credits</span>
+                                <div className="mt-2 text-xs font-serif italic text-zinc-400 group-hover:text-white">{pkg.price}</div>
+                            </button>
+                        ))}
+                    </div>
+                </section>
+            </div>
+
+            {/* Right Column: AI & Studio Config */}
+            <div className="lg:col-span-2 space-y-12">
+                
+                {/* Visual Settings */}
+                <section className="space-y-6">
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 border-b border-dark-border pb-3">Visual Workspace</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[
+                            { id: 'nordic-dark', label: 'Nordic Night', color: '#18181b', desc: 'Minimal zinc' },
+                            { id: 'midnight', label: 'Deep Ocean', color: '#020617', desc: 'True dark' },
+                            { id: 'paper-light', label: 'Classic Ink', color: '#faf9f6', desc: 'High contrast' }
+                        ].map(theme => (
+                            <button
+                                key={theme.id}
+                                onClick={() => handleChange('theme', theme.id as Theme)}
+                                className={`p-5 rounded-3xl border transition-all flex flex-col items-start gap-4 text-left
+                                ${settings.theme === theme.id 
+                                    ? 'border-cobalt bg-cobalt/5 shadow-xl shadow-cobalt/5' 
+                                    : 'border-dark-border bg-dark-surface/50 hover:bg-dark-surface hover:border-zinc-700'}`}
+                            >
+                                <div className="w-10 h-10 rounded-xl border-4 border-black/20 shadow-inner" style={{ backgroundColor: theme.color }} />
+                                <div>
+                                    <h4 className={`text-sm font-bold ${settings.theme === theme.id ? 'text-white' : 'text-zinc-400'}`}>{theme.label}</h4>
+                                    <p className="text-[10px] text-zinc-600 uppercase tracking-widest font-black mt-1">{theme.desc}</p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </section>
+
+                {/* AI Configuration */}
+                <section className="space-y-8 bg-dark-surface/30 border border-white/5 rounded-[2.5rem] p-8 md:p-12">
+                    <div className="space-y-10">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center text-cobalt">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-serif text-white">AI Neural Engine</h3>
+                                <p className="text-sm text-zinc-500">Configure the models powering your narratives.</p>
+                            </div>
+                        </div>
+
+                        {/* Text Model */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-white/5">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Creative Co-Writer</label>
+                                <p className="text-xs text-zinc-600 leading-relaxed">The reasoning engine used for brainstorming and prose generation.</p>
+                            </div>
+                            <select 
+                                value={settings.textModel}
+                                onChange={(e) => handleChange('textModel', e.target.value)}
+                                className="w-full bg-zinc-900 border border-white/5 rounded-2xl p-4 text-sm text-white focus:border-cobalt outline-none appearance-none cursor-pointer hover:bg-zinc-800 transition-colors"
+                            >
+                                <optgroup label="Google DeepMind">
+                                    <option value="gemini-3-flash-preview">Gemini 3.0 Flash (Fastest)</option>
+                                    <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Intelligent)</option>
                                 </optgroup>
                                 <optgroup label="OpenAI">
-                                    <option value="tts-1">OpenAI TTS 1</option>
-                                    <option value="tts-1-hd">OpenAI TTS 1 HD</option>
+                                    <option value="gpt-4o">GPT-4o</option>
+                                    <option value="gpt-4o-mini">GPT-4o Mini</option>
                                 </optgroup>
                             </select>
                         </div>
-                     </div>
-                 )}
-             </div>
-          </div>
 
+                        {/* Image Resolution */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-white/5">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Illustration Quality</label>
+                                <p className="text-xs text-zinc-600 leading-relaxed">Higher resolutions consume more storage and credits.</p>
+                            </div>
+                            <div className="flex gap-2 p-1 bg-zinc-900 border border-white/5 rounded-2xl">
+                                {['Low', '1K', '2K'].map(res => (
+                                    <button
+                                        key={res}
+                                        onClick={() => handleChange('imageResolution', res as any)}
+                                        className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all
+                                        ${settings.imageResolution === res ? 'bg-cobalt text-white shadow-lg' : 'text-zinc-600 hover:text-zinc-400'}`}
+                                    >
+                                        {res}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Custom Keys */}
+                        <div className="space-y-6 pt-10 border-t border-white/5">
+                            <div className="relative group">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-3 block">Google API Key (Optional)</label>
+                                <input 
+                                    type={showKey ? "text" : "password"}
+                                    value={settings.apiKey}
+                                    onChange={(e) => handleChange('apiKey', e.target.value)}
+                                    placeholder="AIzaSy..."
+                                    className="w-full bg-zinc-900/50 border border-white/5 rounded-2xl p-4 text-sm text-text-main focus:border-cobalt focus:bg-zinc-900 outline-none font-mono transition-all"
+                                />
+                                <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-10 text-zinc-600 hover:text-white transition-colors">
+                                    {showKey ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg> : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end gap-4 pt-8 border-t border-dark-border">
-            <button 
-                onClick={onCancel}
-                className="px-6 py-2 text-sm text-zinc-400 hover:text-text-main hover:bg-zinc-800 rounded-full transition-colors"
-            >
-                Cancel
-            </button>
-            <button 
-                onClick={handleSave}
-                className="px-8 py-2 bg-cobalt text-white text-sm font-bold rounded-full hover:bg-blue-500 shadow-lg shadow-cobalt/20 transition-all transform hover:-translate-y-1"
-            >
-                Save Changes
-            </button>
-        </div>
+        {/* Subscription Plans */}
+        <section id="subscriptions" className="pt-10 border-t border-dark-border">
+            <SubscriptionPlans 
+                userProfile={userProfile!} 
+                userId={user?.id || ''} 
+                userEmail={user?.email || ''} 
+            />
+        </section>
 
       </div>
     </div>
@@ -310,4 +269,3 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
 };
 
 export default SettingsView;
-

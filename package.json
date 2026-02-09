@@ -10,10 +10,14 @@
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
+    "@stripe/stripe-js": "^8.7.0",
+    "@supabase/supabase-js": "^2.95.3",
+    "jspdf": "2.5.1",
     "openai": "4.28.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "jspdf": "2.5.1"
+    "react-router-dom": "^7.13.0",
+    "stripe": "^20.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -22,4 +26,3 @@
     "vite": "^6.2.0"
   }
 }
-

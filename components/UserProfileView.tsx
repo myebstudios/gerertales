@@ -1,14 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { UserProfile, Story } from '../types';
+import { User } from '@supabase/supabase-js';
 
 interface UserProfileViewProps {
   profile: UserProfile;
   stories: Story[];
   onUpdateProfile: (profile: UserProfile) => void;
+  user: User | null;
+  onLogout: () => void;
 }
 
-const UserProfileView: React.FC<UserProfileViewProps> = ({ profile, stories, onUpdateProfile }) => {
+const UserProfileView: React.FC<UserProfileViewProps> = ({ profile, stories, onUpdateProfile, user, onLogout }) => {
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio);
   const [isEditing, setIsEditing] = useState(false);
@@ -75,15 +78,25 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ profile, stories, onU
                 </div>
             </div>
             
-            <button
-                onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-                className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all
-                    ${isEditing 
-                        ? 'bg-cobalt text-white hover:bg-blue-500 shadow-lg shadow-cobalt/20' 
-                        : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-dark-border'}`}
-            >
-                {isEditing ? 'Save Profile' : 'Edit Profile'}
-            </button>
+            <div className="flex gap-3">
+                <button
+                    onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                    className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all
+                        ${isEditing 
+                            ? 'bg-cobalt text-white hover:bg-blue-500 shadow-lg shadow-cobalt/20' 
+                            : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-dark-border'}`}
+                >
+                    {isEditing ? 'Save Profile' : 'Edit Profile'}
+                </button>
+                {user && (
+                    <button
+                        onClick={onLogout}
+                        className="px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest bg-red-900/20 text-red-500 border border-red-900/30 hover:bg-red-900/30 transition-all"
+                    >
+                        Logout
+                    </button>
+                )}
+            </div>
         </div>
 
         {/* Stats Grid */}
