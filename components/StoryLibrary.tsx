@@ -9,6 +9,7 @@ interface StoryLibraryProps {
   onDeleteStory: (id: string, e: React.MouseEvent) => void;
   onImportStory: (file: File) => void;
   onBackupStory: (story: Story, e: React.MouseEvent) => void;
+  isPublicView?: boolean;
 }
 
 const FORMAT_OPTIONS: StoryFormat[] = [
@@ -54,6 +55,20 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDele
             <div className="absolute top-5 right-5 bg-white/10 backdrop-blur-xl text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-white/20 uppercase tracking-[0.15em]">
                 {story.toc.filter(c => c.content.length > 0).length}/{story.toc.length} CH
             </div>
+
+            {/* Social Stats Overlay */}
+            {story.isPublic && (
+                <div className="absolute top-5 left-5 flex gap-2">
+                    <div className="bg-black/40 backdrop-blur-md text-white text-[8px] font-black px-2 py-1 rounded-md border border-white/10 flex items-center gap-1">
+                        <svg className="w-2.5 h-2.5 text-red-500 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        {story.likesCount || 0}
+                    </div>
+                    <div className="bg-black/40 backdrop-blur-md text-white text-[8px] font-black px-2 py-1 rounded-md border border-white/10 flex items-center gap-1">
+                        <svg className="w-2.5 h-2.5 text-yellow-500 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                        {story.ratingAverage?.toFixed(1) || "0.0"}
+                    </div>
+                </div>
+            )}
         </div>
 
         {/* Details */}
@@ -110,11 +125,25 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
   onCreateNew, 
   onDeleteStory,
   onImportStory,
-  onBackupStory
+  onBackupStory,
+  isPublicView = false
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<StoryFormat | 'All'>('All');
+  const [publicStories, setPublicStories] = useState<Story[]>([]);
+  const [isLoading, setIsLoading] = useState(isPublicView);
+
+  React.useEffect(() => {
+    if (isPublicView) {
+        setIsLoading(true);
+        supabaseService.getPublicStories()
+            .then(setPublicStories)
+            .finally(() => setIsLoading(false));
+    }
+  }, [isPublicView]);
+
+  const displayStories = isPublicView ? publicStories : stories;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -126,8 +155,8 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
   };
 
   const sortedStories = useMemo(() => {
-      return [...stories].sort((a, b) => b.lastModified - a.lastModified);
-  }, [stories]);
+      return [...displayStories].sort((a, b) => b.lastModified - a.lastModified);
+  }, [displayStories]);
 
   const filteredStories = useMemo(() => {
       return sortedStories.filter(s => {
@@ -140,17 +169,19 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
 
   const collections = useMemo(() => {
     const map: Record<string, Story[]> = {};
-    stories.forEach(s => {
+    displayStories.forEach(s => {
       const name = s.collection || 'Uncategorized';
       if (!map[name]) map[name] = [];
       map[name].push(s);
     });
     return map;
-  }, [stories]);
+  }, [displayStories]);
 
   const recentStories = useMemo(() => {
       return sortedStories.slice(0, 3);
   }, [sortedStories]);
+
+  if (isLoading) return <div className="flex-1 flex items-center justify-center bg-dark-bg font-serif text-zinc-500 animate-pulse">Consulting the Archives...</div>
 
   return (
     <div className="flex-1 h-full bg-dark-bg p-8 md:p-12 overflow-y-auto no-scrollbar">
@@ -159,33 +190,39 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
           <div>
-            <h1 className="text-4xl font-serif text-text-main font-medium tracking-tight">Your Library</h1>
-            <p className="text-text-muted mt-2 font-sans text-lg">Resume your narratives or spark a new one.</p>
+            <h1 className="text-4xl font-serif text-text-main font-medium tracking-tight">
+                {isPublicView ? "Library Explorer" : "Your Library"}
+            </h1>
+            <p className="text-text-muted mt-2 font-sans text-lg">
+                {isPublicView ? "Discover the next era of storytelling." : "Resume your narratives or spark a new one."}
+            </p>
           </div>
-          <div className="flex gap-4">
-             <input 
-                type="file" 
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept=".gtale,.json"
-                className="hidden"
-             />
-             <button
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-zinc-800 text-text-main border border-dark-border px-8 py-4 rounded-2xl text-sm font-bold hover:bg-zinc-700 transition-all active:scale-95"
-             >
-                Import
-             </button>
-             <button
-                onClick={onCreateNew}
-                className="bg-cobalt text-white px-8 py-4 rounded-2xl text-sm font-bold hover:bg-blue-500 transition-all shadow-xl shadow-cobalt/20 hover:shadow-2xl hover:-translate-y-1 active:scale-95"
-             >
-                + New Story
-             </button>
-          </div>
+          {!isPublicView && (
+            <div className="flex gap-4">
+                <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept=".gtale,.json"
+                    className="hidden"
+                />
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-zinc-800 text-text-main border border-dark-border px-8 py-4 rounded-2xl text-sm font-bold hover:bg-zinc-700 transition-all active:scale-95"
+                >
+                    Import
+                </button>
+                <button
+                    onClick={onCreateNew}
+                    className="bg-cobalt text-white px-8 py-4 rounded-2xl text-sm font-bold hover:bg-blue-500 transition-all shadow-xl shadow-cobalt/20 hover:shadow-2xl hover:-translate-y-1 active:scale-95"
+                >
+                    + New Story
+                </button>
+            </div>
+          )}
         </div>
 
-        {stories.length > 0 && (
+        {displayStories.length > 0 && (
             <div className="space-y-6">
                 <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1 relative">

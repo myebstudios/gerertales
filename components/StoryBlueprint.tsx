@@ -15,6 +15,8 @@ interface StoryBlueprintProps {
   deductCredits: (cost: number, feature: string) => void;
   focusMode?: boolean;
   onToggleFocus?: () => void;
+  isOwner?: boolean;
+  onTogglePublish?: () => void;
 }
 
 const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'];
@@ -29,7 +31,9 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   checkCredits,
   deductCredits,
   focusMode = false,
-  onToggleFocus
+  onToggleFocus,
+  isOwner = true,
+  onTogglePublish
 }) => {
   const chapter = story.toc[currentChapterIndex];
   
@@ -449,6 +453,20 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+            {/* Publish Toggle (Owner Only) */}
+            {isOwner && (
+                <button 
+                    onClick={onTogglePublish}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border
+                    ${story.isPublic 
+                        ? 'bg-cobalt/10 border-cobalt/20 text-cobalt' 
+                        : 'bg-zinc-800 border-white/5 text-zinc-400 hover:text-white hover:border-white/10'}`}
+                >
+                    <div className={`w-1.5 h-1.5 rounded-full ${story.isPublic ? 'bg-cobalt animate-pulse' : 'bg-zinc-600'}`} />
+                    {story.isPublic ? 'Published' : 'Publish'}
+                </button>
+            )}
+
             {/* Focus Toggle */}
             <button 
                 onClick={onToggleFocus}
@@ -517,6 +535,59 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                     className="w-full min-h-[70vh] resize-none outline-none font-serif text-xl md:text-2xl leading-[1.8] text-text-main placeholder-zinc-800 bg-transparent" 
                     spellCheck={false} 
                 />
+
+                {/* Social Interactions Section (Visible if Public) */}
+                {story.isPublic && (
+                    <div className="mt-32 pt-16 border-t border-white/5 space-y-12">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-8">
+                                <button className="flex items-center gap-3 group">
+                                    <div className="p-4 rounded-2xl bg-zinc-900 border border-white/5 text-zinc-500 group-hover:text-red-500 group-hover:border-red-500/20 group-hover:bg-red-500/5 transition-all">
+                                        <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xl font-serif text-white">{story.likesCount || 0}</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Appreciations</span>
+                                    </div>
+                                </button>
+
+                                <div className="flex items-center gap-3 group">
+                                    <div className="p-4 rounded-2xl bg-zinc-900 border border-white/5 text-zinc-500 group-hover:text-yellow-500 transition-all flex gap-1">
+                                        {[1, 2, 3, 4, 5].map(s => (
+                                            <svg key={s} className={`w-4 h-4 fill-current ${s <= (story.ratingAverage || 0) ? 'text-yellow-500' : 'text-zinc-800'}`} viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                                        ))}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xl font-serif text-white">{story.ratingAverage?.toFixed(1) || "0.0"}</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Rating</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button className="bg-white text-black px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all active:scale-95 shadow-2xl">
+                                Add to Collection
+                            </button>
+                        </div>
+
+                        {/* Comments Section */}
+                        <div className="space-y-8 bg-zinc-900/50 rounded-[2.5rem] p-12 border border-white/5">
+                            <h3 className="text-2xl font-serif text-white tracking-tight">Discussion</h3>
+                            
+                            <div className="flex gap-6">
+                                <div className="w-12 h-12 rounded-full bg-zinc-800 flex-shrink-0" />
+                                <div className="flex-1 space-y-4">
+                                    <textarea 
+                                        placeholder="Leave your thoughts on this tale..."
+                                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl p-6 text-sm outline-none focus:border-cobalt transition-all min-h-[120px] resize-none"
+                                    />
+                                    <button className="bg-cobalt text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all">
+                                        Post Comment
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
       </div>

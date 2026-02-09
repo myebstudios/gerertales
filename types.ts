@@ -24,6 +24,7 @@ export interface Chapter {
 
 export interface Story {
   id: string;
+  ownerId?: string;
   title: string;
   spark: string;
   tone: string;

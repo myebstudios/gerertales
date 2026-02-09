@@ -1,8 +1,13 @@
 
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { User } from '@supabase/supabase-js';
 
-const LandingPage: React.FC = () => {
+interface LandingPageProps {
+    user: User | null;
+}
+
+const LandingPage: React.FC<LandingPageProps> = ({ user }) => {
     return (
         <div className="min-h-screen bg-dark-bg text-text-main font-sans selection:bg-cobalt selection:text-white overflow-x-hidden w-full">
             {/* Nav */}
@@ -16,8 +21,17 @@ const LandingPage: React.FC = () => {
                     <span className="font-serif text-xl tracking-tighter font-medium text-white">GérerTales</span>
                 </div>
                 <div className="flex items-center gap-8">
-                    <Link to="/auth" className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Sign In</Link>
-                    <Link to="/auth" className="bg-white text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all active:scale-95 shadow-xl shadow-white/5">Get Started</Link>
+                    <Link to="/discover" className="text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:text-white transition-colors">Library Explorer</Link>
+                    {user ? (
+                        <Link to="/library" className="bg-cobalt text-white px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all active:scale-95 shadow-xl shadow-cobalt/10 ring-1 ring-cobalt/30">
+                            GererTales Studio
+                        </Link>
+                    ) : (
+                        <>
+                            <Link to="/auth" className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-colors">Sign In</Link>
+                            <Link to="/auth" className="bg-white text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all active:scale-95 shadow-xl shadow-white/5">Get Started</Link>
+                        </>
+                    )}
                 </div>
             </nav>
 
@@ -68,6 +82,39 @@ const LandingPage: React.FC = () => {
                     </div>
                 </div>
             </main>
+
+            {/* Library Explorer Preview */}
+            <section className="py-32 px-8 bg-zinc-900/20">
+                <div className="max-w-7xl mx-auto space-y-16">
+                    <div className="flex items-end justify-between border-b border-white/5 pb-8">
+                        <div className="space-y-4">
+                            <h2 className="text-4xl font-serif text-white tracking-tight">The Library Explorer.</h2>
+                            <p className="text-zinc-500 text-lg max-w-md">Discover the latest masterpieces published by the GérerTales community.</p>
+                        </div>
+                        <Link to="/discover" className="text-[10px] font-black uppercase tracking-[0.3em] text-cobalt hover:text-white transition-colors pb-1">
+                            Browse Catalog →
+                        </Link>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                        {[
+                            { title: "Echoes of Yaoundé", format: "Novel", image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?q=80&w=600" },
+                            { title: "The Solar Weaver", format: "Short Story", image: "https://images.unsplash.com/photo-1614728263952-84ea256f9679?q=80&w=600" },
+                            { title: "Midnight in Limbé", format: "Screenplay", image: "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?q=80&w=600" },
+                            { title: "Circuit of Dreams", format: "Comic", image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600" }
+                        ].map((book, i) => (
+                            <div key={i} className="group relative aspect-[3/4] bg-zinc-900 rounded-[2rem] overflow-hidden border border-white/5 transition-all duration-500 hover:scale-[1.02] hover:border-white/20 shadow-2xl">
+                                <img src={book.image} className="absolute inset-0 w-full h-full object-cover opacity-50 grayscale group-hover:grayscale-0 group-hover:opacity-80 transition-all duration-700" alt={book.title} />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                                <div className="absolute bottom-8 left-8 right-8 space-y-2">
+                                    <span className="text-[8px] font-black uppercase tracking-widest text-cobalt">{book.format}</span>
+                                    <h4 className="text-xl font-serif text-white leading-tight">{book.title}</h4>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
 
             {/* Features Detail */}
             <section className="py-40 bg-zinc-950/50 border-y border-white/5 px-8">

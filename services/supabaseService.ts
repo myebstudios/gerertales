@@ -99,6 +99,7 @@ export const supabaseService = {
 
     return data.map(s => ({
       id: s.id,
+      ownerId: s.owner_id,
       title: s.title,
       spark: s.spark,
       tone: s.tone,
@@ -165,6 +166,7 @@ export const supabaseService = {
 
     return data.map(s => ({
       id: s.id,
+      ownerId: s.owner_id,
       title: s.title,
       spark: s.spark,
       tone: s.tone,
@@ -258,6 +260,7 @@ export const supabaseService = {
         const s = item.stories;
         return {
             id: s.id,
+            ownerId: s.owner_id,
             title: s.title,
             spark: s.spark,
             tone: s.tone,

@@ -29,19 +29,38 @@ const AppNavigation: React.FC<AppNavigationProps> = ({ userProfile, user, onLogi
 
   return (
     <div className="w-16 h-full bg-dark-surface border-r border-dark-border flex flex-col items-center py-6 gap-6 z-20">
-      {/* Logo Icon */}
-      <div className="w-10 h-10 bg-cobalt rounded-xl flex items-center justify-center shadow-lg shadow-cobalt/20 mb-4">
+      {/* Logo Icon / Studio Home */}
+      <Link 
+        to="/library"
+        className="w-10 h-10 bg-cobalt rounded-xl flex items-center justify-center shadow-lg shadow-cobalt/20 mb-4 hover:scale-105 transition-transform"
+        title="GererTales Studio"
+      >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-white">
           <path d="M11.25 4.533A9.707 9.707 0 006 3.75c-4.553 0-8.25 3.697-8.25 8.25s3.697 8.25 8.25 8.25a9.768 9.768 0 004.586-1.166 9.768 9.768 0 004.586 1.166c4.553 0 8.25-3.697 8.25-8.25s-3.697-8.25-8.25-8.25a9.707 9.707 0 00-5.25.783zM12 21.75H6a8.25 8.25 0 01-5.322-14.706C2.079 12.31 6.545 16.29 11.25 16.5v5.25z" />
         </svg>
-      </div>
+      </Link>
+
+      {/* Discover / Public Explorer */}
+      <Link
+        to="/discover"
+        className={`p-3 rounded-xl transition-all duration-300 group relative
+          ${currentPath === '/discover' ? 'bg-zinc-800 text-cobalt' : 'text-zinc-500 hover:text-text-main hover:bg-zinc-800/50'}`}
+        title="Discover"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
+        </svg>
+        <span className="absolute left-14 bg-zinc-800 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-dark-border z-50">
+            Explorer
+        </span>
+      </Link>
 
       {/* Library */}
       <Link
         to="/library"
         className={`p-3 rounded-xl transition-all duration-300 group relative
           ${currentPath === '/library' ? 'bg-zinc-800 text-cobalt' : 'text-zinc-500 hover:text-text-main hover:bg-zinc-800/50'}`}
-        title="Library"
+        title="My Studio Library"
       >
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />

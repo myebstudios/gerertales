@@ -133,6 +133,10 @@ const App: React.FC = () => {
 
   // -- Navigation Handlers --
   const handleSelectStory = (story: Story) => {
+    if (!user) {
+        navigate('/auth');
+        return;
+    }
     setActiveStoryId(story.id);
     setMessages([{
         id: 'restore',
@@ -251,6 +255,19 @@ const App: React.FC = () => {
     }
   };
 
+  const handleTogglePublish = async () => {
+    if (currentStory && user) {
+        const isPublic = !currentStory.isPublic;
+        const updatedStory = { 
+            ...currentStory, 
+            isPublic, 
+            publishedAt: isPublic ? Date.now() : currentStory.publishedAt 
+        };
+        setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
+        await supabaseService.saveStory(user.id, updatedStory);
+    }
+  };
+
   if (authLoading) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted">Loading Studio...</div>;
 
   return (
@@ -263,11 +280,23 @@ const App: React.FC = () => {
         />
       )}
       
-      <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings'].includes(location.pathname) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
+      <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings', '/discover'].includes(location.pathname) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
         <Routes>
-          <Route path="/" element={user ? <Navigate to="/library" /> : <LandingPage />} />
+          <Route path="/" element={<LandingPage user={user} />} />
           <Route path="/auth" element={user ? <Navigate to="/library" /> : <Auth />} />
           
+          <Route path="/discover" element={
+            <StoryLibrary 
+              stories={[]} // Will fetch public stories in component
+              onSelectStory={handleSelectStory}
+              onCreateNew={() => navigate('/onboarding')}
+              onDeleteStory={() => {}}
+              onImportStory={() => {}}
+              onBackupStory={() => {}}
+              isPublicView={true}
+            />
+          } />
+
           <Route path="/library" element={
             <StoryLibrary 
               stories={stories}
@@ -313,9 +342,11 @@ const App: React.FC = () => {
                             }}
                             onContentUpdate={handleContentUpdate}
                             checkCredits={hasCredits}
-                            deductCredits={deductCredits}
+                            onDeductCredits={deductCredits}
                             focusMode={focusMode}
                             onToggleFocus={() => setFocusMode(!focusMode)}
+                            isOwner={user?.id === currentStory.ownerId}
+                            onTogglePublish={handleTogglePublish}
                         />
                     </div>
                 </>
