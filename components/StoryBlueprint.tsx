@@ -17,6 +17,8 @@ interface StoryBlueprintProps {
   onToggleFocus?: () => void;
   isOwner?: boolean;
   onTogglePublish?: () => void;
+  userId?: string;
+  onRefreshStory?: () => void;
 }
 
 const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'];
@@ -33,10 +35,12 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   focusMode = false,
   onToggleFocus,
   isOwner = true,
-  onTogglePublish
+  onTogglePublish,
+  userId,
+  onRefreshStory
 }) => {
   const chapter = story.toc[currentChapterIndex];
-  
+
   // -- Local Stats --
   const wordCount = chapter?.content?.trim() ? chapter.content.trim().split(/\s+/).length : 0;
   const readingTime = Math.ceil(wordCount / 200); // Average 200 wpm
@@ -47,6 +51,68 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0); 
   const [showSettings, setShowSettings] = useState(false);
+
+  // -- Social State --
+  const [comments, setComments] = useState<StoryComment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [isPostingComment, setIsPostingComment] = useState(false);
+  const [userRating, setUserRating] = useState(0);
+  const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
+
+  // Fetch comments and social status
+  useEffect(() => {
+    if (story.isPublic) {
+        supabaseService.getComments(story.id).then(setComments);
+        if (userId) {
+            supabaseService.hasUserLiked(userId, story.id).then(setHasLiked);
+        }
+    }
+  }, [story.id, story.isPublic, userId]);
+
+  const handleLike = async () => {
+    if (!userId) return alert("Sign in to appreciate this tale!");
+    try {
+        await supabaseService.likeStory(userId, story.id);
+        setHasLiked(true);
+        if (onRefreshStory) onRefreshStory();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleRate = async (rating: number) => {
+    if (!userId) return alert("Sign in to rate this tale!");
+    try {
+        await supabaseService.rateStory(userId, story.id, rating);
+        setUserRating(rating);
+        if (onRefreshStory) onRefreshStory();
+    } catch (e) { console.error(e); }
+  };
+
+  const handlePostComment = async () => {
+    if (!userId) return alert("Sign in to leave a comment!");
+    if (!newComment.trim()) return;
+
+    setIsPostingComment(true);
+    try {
+        await supabaseService.addComment(userId, story.id, newComment.trim());
+        setNewComment('');
+        const updated = await supabaseService.getComments(story.id);
+        setComments(updated);
+        if (onRefreshStory) onRefreshStory();
+    } catch (e) { console.error(e); } finally {
+        setIsPostingComment(false);
+    }
+  };
+
+  const handleSaveToLibrary = async () => {
+      if (!userId) return alert("Sign in to save this tale!");
+      setIsSavingToLibrary(true);
+      try {
+          await supabaseService.saveToPersonalLibrary(userId, story.id);
+          alert("Saved to your personal collection!");
+      } catch (e) { console.error(e); } finally {
+          setIsSavingToLibrary(false);
+      }
+  };
 
   // -- Settings State --
   const [ttsProvider, setTtsProvider] = useState<TTSProvider>('ai');
@@ -538,23 +604,35 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
 
                 {/* Social Interactions Section (Visible if Public) */}
                 {story.isPublic && (
-                    <div className="mt-32 pt-16 border-t border-white/5 space-y-12">
-                        <div className="flex items-center justify-between">
+                    <div className="mt-32 pt-16 border-t border-white/5 space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
                             <div className="flex items-center gap-8">
-                                <button className="flex items-center gap-3 group">
-                                    <div className="p-4 rounded-2xl bg-zinc-900 border border-white/5 text-zinc-500 group-hover:text-red-500 group-hover:border-red-500/20 group-hover:bg-red-500/5 transition-all">
+                                <button 
+                                    onClick={handleLike}
+                                    className="flex items-center gap-3 group"
+                                >
+                                    <div className={`p-4 rounded-2xl bg-zinc-900 border border-white/5 transition-all
+                                        ${hasLiked ? 'text-red-500 border-red-500/20 bg-red-500/5' : 'text-zinc-500 group-hover:text-red-500 group-hover:border-red-500/20 group-hover:bg-red-500/5'}`}>
                                         <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                                     </div>
-                                    <div className="flex flex-col">
+                                    <div className="flex flex-col text-left">
                                         <span className="text-xl font-serif text-white">{story.likesCount || 0}</span>
                                         <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Appreciations</span>
                                     </div>
                                 </button>
 
                                 <div className="flex items-center gap-3 group">
-                                    <div className="p-4 rounded-2xl bg-zinc-900 border border-white/5 text-zinc-500 group-hover:text-yellow-500 transition-all flex gap-1">
+                                    <div className="p-4 rounded-2xl bg-zinc-900 border border-white/5 text-zinc-500 transition-all flex gap-1">
                                         {[1, 2, 3, 4, 5].map(s => (
-                                            <svg key={s} className={`w-4 h-4 fill-current ${s <= (story.ratingAverage || 0) ? 'text-yellow-500' : 'text-zinc-800'}`} viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                                            <svg 
+                                                key={s} 
+                                                onClick={() => handleRate(s)}
+                                                className={`w-4 h-4 fill-current cursor-pointer transition-transform hover:scale-125
+                                                ${s <= (userRating || story.ratingAverage || 0) ? 'text-yellow-500' : 'text-zinc-800'}`} 
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                                            </svg>
                                         ))}
                                     </div>
                                     <div className="flex flex-col">
@@ -564,30 +642,67 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                                 </div>
                             </div>
 
-                            <button className="bg-white text-black px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all active:scale-95 shadow-2xl">
-                                Add to Collection
+                            <button 
+                                onClick={handleSaveToLibrary}
+                                disabled={isSavingToLibrary}
+                                className="bg-white text-black px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all active:scale-95 shadow-2xl disabled:opacity-50"
+                            >
+                                {isSavingToLibrary ? 'Saving...' : 'Add to Collection'}
                             </button>
                         </div>
 
                         {/* Comments Section */}
-                        <div className="space-y-8 bg-zinc-900/50 rounded-[2.5rem] p-12 border border-white/5">
-                            <h3 className="text-2xl font-serif text-white tracking-tight">Discussion</h3>
+                        <div className="space-y-12 bg-zinc-900/50 rounded-[2.5rem] p-8 md:p-12 border border-white/5">
+                            <h3 className="text-2xl font-serif text-white tracking-tight">Discussion ({comments.length})</h3>
                             
-                            <div className="flex gap-6">
-                                <div className="w-12 h-12 rounded-full bg-zinc-800 flex-shrink-0" />
+                            <div className="flex flex-col md:flex-row gap-6">
+                                <div className="w-12 h-12 rounded-full bg-zinc-800 flex-shrink-0 border border-white/5" />
                                 <div className="flex-1 space-y-4">
                                     <textarea 
+                                        value={newComment}
+                                        onChange={(e) => setNewComment(e.target.value)}
                                         placeholder="Leave your thoughts on this tale..."
-                                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl p-6 text-sm outline-none focus:border-cobalt transition-all min-h-[120px] resize-none"
+                                        className="w-full bg-zinc-900 border border-white/5 rounded-2xl p-6 text-sm outline-none focus:border-cobalt transition-all min-h-[120px] resize-none text-white placeholder-zinc-700"
                                     />
-                                    <button className="bg-cobalt text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all">
-                                        Post Comment
+                                    <button 
+                                        onClick={handlePostComment}
+                                        disabled={isPostingComment || !newComment.trim()}
+                                        className="bg-cobalt text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all disabled:opacity-50"
+                                    >
+                                        {isPostingComment ? 'Posting...' : 'Post Comment'}
                                     </button>
                                 </div>
+                            </div>
+
+                            <div className="space-y-8 pt-8 border-t border-white/5">
+                                {comments.map(comment => (
+                                    <div key={comment.id} className="flex gap-6 group">
+                                        <div className="w-10 h-10 rounded-full bg-cobalt/10 border border-cobalt/20 flex items-center justify-center text-cobalt font-bold text-xs">
+                                            {comment.userName.charAt(0)}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3 mb-1">
+                                                <span className="text-xs font-bold text-white">{comment.userName}</span>
+                                                <span className="text-[10px] text-zinc-600 uppercase font-black tracking-tighter">
+                                                    {new Date(comment.createdAt).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-zinc-400 leading-relaxed font-sans">
+                                                {comment.text}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {comments.length === 0 && (
+                                    <div className="text-center py-8 text-zinc-600 font-serif italic">
+                                        No thoughts shared yet. Be the first to start the discussion.
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
                 )}
+
             </div>
         </div>
       </div>

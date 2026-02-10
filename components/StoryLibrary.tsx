@@ -131,7 +131,8 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
   onDeleteStory,
   onImportStory,
   onBackupStory,
-  isPublicView = false
+  isPublicView = false,
+  currentUserId
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
@@ -144,6 +145,10 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
         setIsLoading(true);
         supabaseService.getPublicStories()
             .then(setPublicStories)
+            .catch(err => {
+                console.error("Failed to fetch public stories:", err);
+                setPublicStories([]);
+            })
             .finally(() => setIsLoading(false));
     }
   }, [isPublicView]);

@@ -377,12 +377,26 @@ const App: React.FC = () => {
                                 if (user) supabaseService.saveStory(user.id, updated);
                             }}
                             onContentUpdate={handleContentUpdate}
+                            onChapterUpdate={(idx, updates) => {
+                                const updatedChapters = [...currentStory.toc];
+                                updatedChapters[idx] = { ...updatedChapters[idx], ...updates };
+                                const updatedStory = { ...currentStory, toc: updatedChapters };
+                                setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
+                                if (user) supabaseService.saveStory(user.id, updatedStory);
+                            }}
                             checkCredits={hasCredits}
                             onDeductCredits={deductCredits}
                             focusMode={focusMode}
                             onToggleFocus={() => setFocusMode(!focusMode)}
                             isOwner={user?.id === currentStory.ownerId}
                             onTogglePublish={handleTogglePublish}
+                            userId={user?.id}
+                            onRefreshStory={async () => {
+                                if (user) {
+                                    const cloudStories = await supabaseService.getStories(user.id);
+                                    setStories(cloudStories);
+                                }
+                            }}
                         />
                     </div>
                 </>

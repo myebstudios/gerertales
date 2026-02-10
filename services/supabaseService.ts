@@ -150,26 +150,12 @@ export const supabaseService = {
 
         if (error) {
             console.error("Supabase query error:", error);
-            // Fallback if social tables are missing
-            if (error.code === 'PGRST204' || error.code === '42P01') {
-                console.log("Falling back to basic story fetch...");
-                const { data: fallbackData, error: fallbackError } = await supabase
-                    .from('stories')
-                    .select('*')
-                    .eq('is_public', true)
-                    .order('published_at', { ascending: false });
-                
-                if (fallbackError) {
-                    console.error("Fallback error:", fallbackError);
-                    throw fallbackError;
-                }
-                return fallbackData.map(s => this._mapStory(s));
-            }
             throw error;
         }
+        
         console.log(`Fetched ${data?.length || 0} public stories.`);
         return data.map(s => ({
-          ...this._mapStory(s),
+          ...supabaseService._mapStory(s),
           likesCount: s.likes_count?.[0]?.count || 0,
           commentsCount: s.comments_count?.[0]?.count || 0,
           ratingAverage: s.rating_avg?.[0]?.avg || 0
@@ -205,6 +191,18 @@ export const supabaseService = {
       .from('story_likes')
       .upsert({ user_id: userId, story_id: storyId });
     if (error) throw error;
+  },
+
+  async hasUserLiked(userId: string, storyId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('story_likes')
+      .select('user_id')
+      .eq('user_id', userId)
+      .eq('story_id', storyId)
+      .maybeSingle();
+    
+    if (error) return false;
+    return !!data;
   },
 
   async rateStory(userId: string, storyId: string, rating: number) {
