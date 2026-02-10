@@ -1,6 +1,7 @@
 
 import React, { useRef, useState, useMemo } from 'react';
 import { Story, StoryFormat } from '../types';
+import { supabaseService } from '../services/supabaseService';
 
 interface StoryLibraryProps {
   stories: Story[];

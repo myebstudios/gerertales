@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Story, UserProfile, Message } from '../types';
+import { Story, UserProfile, Message, StoryComment } from '../types';
 
 export const supabaseService = {
   // Auth
