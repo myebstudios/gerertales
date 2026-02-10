@@ -135,6 +135,7 @@ export const supabaseService = {
   },
 
   async getPublicStories(): Promise<Story[]> {
+    console.log("Fetching public stories...");
     try {
         const { data, error } = await supabase
           .from('stories')
@@ -148,20 +149,25 @@ export const supabaseService = {
           .order('published_at', { ascending: false });
 
         if (error) {
+            console.error("Supabase query error:", error);
             // Fallback if social tables are missing
             if (error.code === 'PGRST204' || error.code === '42P01') {
+                console.log("Falling back to basic story fetch...");
                 const { data: fallbackData, error: fallbackError } = await supabase
                     .from('stories')
                     .select('*')
                     .eq('is_public', true)
                     .order('published_at', { ascending: false });
                 
-                if (fallbackError) throw fallbackError;
+                if (fallbackError) {
+                    console.error("Fallback error:", fallbackError);
+                    throw fallbackError;
+                }
                 return fallbackData.map(s => this._mapStory(s));
             }
             throw error;
         }
-
+        console.log(`Fetched ${data?.length || 0} public stories.`);
         return data.map(s => ({
           ...this._mapStory(s),
           likesCount: s.likes_count?.[0]?.count || 0,
@@ -169,7 +175,7 @@ export const supabaseService = {
           ratingAverage: s.rating_avg?.[0]?.avg || 0
         }));
     } catch (e) {
-        console.error("Public fetch failed", e);
+        console.error("Public fetch failed completely:", e);
         return [];
     }
   },
