@@ -328,6 +328,7 @@ const App: React.FC = () => {
               onImportStory={handleImportStory}
               onBackupStory={handleBackupStory}
               isPublicView={true}
+              currentUserId={user?.id}
             />
           } />
 
@@ -339,6 +340,7 @@ const App: React.FC = () => {
               onDeleteStory={handleDeleteStory}
               onImportStory={handleImportStory}
               onBackupStory={handleBackupStory}
+              currentUserId={user?.id}
             />
           } />
 

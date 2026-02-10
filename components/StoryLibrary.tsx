@@ -10,6 +10,7 @@ interface StoryLibraryProps {
   onImportStory: (file: File) => void;
   onBackupStory: (story: Story, e: React.MouseEvent) => void;
   isPublicView?: boolean;
+  currentUserId?: string;
 }
 
 const FORMAT_OPTIONS: StoryFormat[] = [
@@ -27,9 +28,10 @@ interface StoryCardProps {
     onSelect: (story: Story) => void;
     onBackup: (story: Story, e: React.MouseEvent) => void;
     onDelete: (id: string, e: React.MouseEvent) => void;
+    currentUserId?: string;
 }
 
-const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDelete }) => (
+const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDelete, currentUserId }) => (
     <div
         onClick={() => onSelect(story)}
         className="group relative bg-dark-surface border border-dark-border rounded-3xl cursor-pointer hover:border-cobalt transition-all hover:shadow-[0_20px_50px_-12px_rgba(96,165,250,0.1)] flex flex-col h-full overflow-hidden"
@@ -43,7 +45,7 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDele
                     className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-1000 ease-out"
                 />
             ) : (
-                <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center p-8 text-center">
+                <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center p-8 text-center" title={story.id}>
                     <span className="font-serif italic text-zinc-700 text-xl tracking-tighter">GérerTales</span>
                 </div>
             )}
@@ -53,7 +55,7 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDele
 
             {/* Chapter Badge */}
             <div className="absolute top-5 right-5 bg-white/10 backdrop-blur-xl text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-white/20 uppercase tracking-[0.15em]">
-                {story.toc.filter(c => c.content.length > 0).length}/{story.toc.length} CH
+                {story.toc?.filter(c => c.content.length > 0).length || 0}/{story.toc?.length || 0} CH
             </div>
 
             {/* Social Stats Overlay */}
@@ -103,16 +105,18 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDele
                         </svg>
                     </button>
 
-                    {/* Delete Button */}
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onDelete(story.id, e); }}
-                        className="text-zinc-600 hover:text-red-500 transition-colors p-2.5 rounded-xl hover:bg-zinc-800"
-                        title="Delete Tale"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                    </button>
+                    {/* Delete Button (Owner Only) */}
+                    {(!currentUserId || story.ownerId === currentUserId) && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onDelete(story.id, e); }}
+                            className="text-zinc-600 hover:text-red-500 transition-colors p-2.5 rounded-xl hover:bg-zinc-800"
+                            title="Delete Tale"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                            </svg>
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -250,10 +254,12 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
         )}
 
         {/* Recently Opened (Only if no search/filter) */}
-        {stories.length > 0 && search === '' && filter === 'All' && (
+        {displayStories.length > 0 && search === '' && filter === 'All' && (
             <div className="space-y-6">
                 <div className="flex items-center gap-4">
-                    <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-cobalt">Recently Opened</h2>
+                    <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-cobalt">
+                        {isPublicView ? "Featured Works" : "Recently Opened"}
+                    </h2>
                     <div className="h-px flex-1 bg-dark-border" />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -281,7 +287,7 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
         )}
 
         <div className="space-y-8">
-            {stories.length > 0 && search === '' && filter === 'All' ? (
+            {displayStories.length > 0 && search === '' && filter === 'All' ? (
                 Object.entries(collections).map(([name, collectionStories]) => (
                     <div key={name} className="space-y-8">
                         <div className="flex items-center gap-4">
