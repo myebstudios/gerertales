@@ -97,23 +97,7 @@ export const supabaseService = {
 
     if (error) throw error;
 
-    return data.map(s => ({
-      id: s.id,
-      ownerId: s.owner_id,
-      title: s.title,
-      spark: s.spark,
-      tone: s.tone,
-      format: s.format as any,
-      activeChapterIndex: s.active_chapter_index,
-      characters: s.characters,
-      locations: s.locations,
-      toc: s.toc,
-      lastModified: new Date(s.last_modified).getTime(),
-      coverImage: s.cover_image,
-      collection: s.collection,
-      isPublic: s.is_public,
-      publishedAt: s.published_at ? new Date(s.published_at).getTime() : undefined
-    }));
+    return data.map(s => this._mapStory(s));
   },
 
   async saveStory(userId: string, story: Story) {
@@ -151,20 +135,47 @@ export const supabaseService = {
   },
 
   async getPublicStories(): Promise<Story[]> {
-    const { data, error } = await supabase
-      .from('stories')
-      .select(`
-        *,
-        likes_count:story_likes(count),
-        comments_count:story_comments(count),
-        rating_avg:story_ratings(rating.avg())
-      `)
-      .eq('is_public', true)
-      .order('published_at', { ascending: false });
+    try {
+        const { data, error } = await supabase
+          .from('stories')
+          .select(`
+            *,
+            likes_count:story_likes(count),
+            comments_count:story_comments(count),
+            rating_avg:story_ratings(rating.avg())
+          `)
+          .eq('is_public', true)
+          .order('published_at', { ascending: false });
 
-    if (error) throw error;
+        if (error) {
+            // Fallback if social tables are missing
+            if (error.code === 'PGRST204' || error.code === '42P01') {
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from('stories')
+                    .select('*')
+                    .eq('is_public', true)
+                    .order('published_at', { ascending: false });
+                
+                if (fallbackError) throw fallbackError;
+                return fallbackData.map(s => this._mapStory(s));
+            }
+            throw error;
+        }
 
-    return data.map(s => ({
+        return data.map(s => ({
+          ...this._mapStory(s),
+          likesCount: s.likes_count?.[0]?.count || 0,
+          commentsCount: s.comments_count?.[0]?.count || 0,
+          ratingAverage: s.rating_avg?.[0]?.avg || 0
+        }));
+    } catch (e) {
+        console.error("Public fetch failed", e);
+        return [];
+    }
+  },
+
+  _mapStory(s: any): Story {
+    return {
       id: s.id,
       ownerId: s.owner_id,
       title: s.title,
@@ -179,11 +190,8 @@ export const supabaseService = {
       coverImage: s.cover_image,
       collection: s.collection,
       isPublic: s.is_public,
-      publishedAt: s.published_at ? new Date(s.published_at).getTime() : undefined,
-      likesCount: s.likes_count?.[0]?.count || 0,
-      commentsCount: s.comments_count?.[0]?.count || 0,
-      ratingAverage: s.rating_avg?.[0]?.avg || 0
-    }));
+      publishedAt: s.published_at ? new Date(s.published_at).getTime() : undefined
+    };
   },
 
   async likeStory(userId: string, storyId: string) {
@@ -256,26 +264,7 @@ export const supabaseService = {
 
     if (error) throw error;
 
-    return data.map((item: any) => {
-        const s = item.stories;
-        return {
-            id: s.id,
-            ownerId: s.owner_id,
-            title: s.title,
-            spark: s.spark,
-            tone: s.tone,
-            format: s.format as any,
-            activeChapterIndex: s.active_chapter_index,
-            characters: s.characters,
-            locations: s.locations,
-            toc: s.toc,
-            lastModified: new Date(s.last_modified).getTime(),
-            coverImage: s.cover_image,
-            collection: s.collection,
-            isPublic: s.is_public,
-            publishedAt: s.published_at ? new Date(s.published_at).getTime() : undefined
-        };
-    });
+    return data.map((item: any) => this._mapStory(item.stories));
   },
 
   // Migration Utility

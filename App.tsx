@@ -255,6 +255,40 @@ const App: React.FC = () => {
     }
   };
 
+  const handleImportStory = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const content = e.target?.result as string;
+            const imported = JSON.parse(content) as Story;
+            // Ensure unique ID for imported tale
+            imported.id = crypto.randomUUID();
+            imported.lastModified = Date.now();
+            imported.ownerId = user?.id;
+            
+            setStories(prev => [imported, ...prev]);
+            if (user) await supabaseService.saveStory(user.id, imported);
+            alert(`"${imported.title}" imported successfully.`);
+        } catch (err) {
+            alert("Failed to parse the tale file. Make sure it's a valid .gtale or .json file.");
+        }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBackupStory = (story: Story, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const blob = new Blob([JSON.stringify(story, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${story.title.replace(/\s+/g, '_')}.gtale`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  };
+
   const handleTogglePublish = async () => {
     if (currentStory && user) {
         const isPublic = !currentStory.isPublic;
@@ -291,8 +325,8 @@ const App: React.FC = () => {
               onSelectStory={handleSelectStory}
               onCreateNew={() => navigate('/onboarding')}
               onDeleteStory={() => {}}
-              onImportStory={() => {}}
-              onBackupStory={() => {}}
+              onImportStory={handleImportStory}
+              onBackupStory={handleBackupStory}
               isPublicView={true}
             />
           } />
@@ -303,8 +337,8 @@ const App: React.FC = () => {
               onSelectStory={handleSelectStory}
               onCreateNew={() => navigate('/onboarding')}
               onDeleteStory={handleDeleteStory}
-              onImportStory={() => {}}
-              onBackupStory={() => {}}
+              onImportStory={handleImportStory}
+              onBackupStory={handleBackupStory}
             />
           } />
 
