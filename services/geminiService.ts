@@ -23,7 +23,7 @@ const isXAIModel = (model: string) => model.toLowerCase().includes('grok');
 // -- Local Engine (GérerLlama) Bridge --
 const callLocalLlama = async (prompt: string): Promise<{ content: string, cost: number }> => {
     try {
-        const url = window.location.hostname === 'localhost' ? 'http://localhost:3001/api/generate' : 'https://gererllama-studio.loca.lt/api/generate';
+        const url = window.location.hostname === 'localhost' ? 'http://localhost:3001/api/generate' : 'https://theme-decent-vehicle-lists.trycloudflare.com/api/generate';
         const response = await fetch(url, {
             method: 'POST',
             headers: {

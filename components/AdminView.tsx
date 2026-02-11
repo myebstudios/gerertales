@@ -3,7 +3,7 @@ import io from 'socket.io-client';
 import { AppSettings } from '../types';
 import { useNotify } from '../services/NotificationContext';
 
-const ENGINE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://gererllama-studio.loca.lt';
+const ENGINE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://theme-decent-vehicle-lists.trycloudflare.com';
 
 interface Stats {
     requests: number;
