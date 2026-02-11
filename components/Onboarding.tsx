@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { StoryConfig, StoryFormat, Character, Chapter, Location, StoryBlueprintData } from '../types';
 import * as GeminiService from '../services/geminiService';
+import { useNotify } from '../services/NotificationContext';
 
 interface OnboardingProps {
   onConfirm: (config: StoryConfig, blueprint: StoryBlueprintData) => void;
@@ -35,6 +36,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
   const [step, setStep] = useState<'INPUT' | 'CONFIG_REVIEW' | 'BLUEPRINT_REVIEW'>('INPUT');
   const [spark, setSpark] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { notify } = useNotify();
   
   // Proposed Config
   const [title, setTitle] = useState('');
@@ -97,7 +99,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
         setStep('CONFIG_REVIEW');
       } catch (e) {
         console.error(e);
-        alert("Could not analyze this spark. Please try again.");
+        notify("Could not analyze this spark. Please try again.", "error");
       } finally {
         setIsAnalyzing(false);
       }
@@ -124,7 +126,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
         setStep('BLUEPRINT_REVIEW');
     } catch (e) {
         console.error(e);
-        alert("Failed to generate blueprint. Please try again.");
+        notify("Failed to generate blueprint. Please try again.", "error");
     } finally {
         setIsAnalyzing(false);
     }

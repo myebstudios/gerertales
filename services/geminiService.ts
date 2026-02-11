@@ -23,11 +23,13 @@ const isXAIModel = (model: string) => model.toLowerCase().includes('grok');
 // -- Local Engine (GérerLlama) Bridge --
 const callLocalLlama = async (prompt: string): Promise<{ content: string, cost: number }> => {
     try {
-        const response = await fetch('http://localhost:3001/api/generate', {
+        const url = window.location.hostname === 'localhost' ? 'http://localhost:3001/api/generate' : 'https://young-mangos-buy.loca.lt/api/generate';
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-gererllama-key': 'gererllama_test'
+                'x-gererllama-key': 'gererllama_test',
+                'Bypass-Tunnel-Reminder': 'true'
             },
             body: JSON.stringify({ prompt, stream: false })
         });
