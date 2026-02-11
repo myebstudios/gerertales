@@ -4,8 +4,8 @@ import OpenAI from "openai";
 import { Chapter, Character, Location, StoryFormat } from "../types";
 
 // Defaults
-const FREE_TEXT_MODEL = 'gemini-1.5-flash';
-const PREMIUM_TEXT_MODEL = 'gemini-1.5-pro';
+const FREE_TEXT_MODEL = 'local-gemma';
+const PREMIUM_TEXT_MODEL = 'local-gemma';
 const DEFAULT_IMAGE_MODEL = 'imagen-3';
 const DEFAULT_TTS_MODEL = 'tts-1';
 
@@ -19,6 +19,29 @@ const RATE_ELEVENLABS_CHAR = 0.05;
 // Helper to check model type
 const isGeminiModel = (model: string) => model.toLowerCase().includes('gemini') || model.toLowerCase().includes('imagen');
 const isXAIModel = (model: string) => model.toLowerCase().includes('grok');
+
+// -- Local Engine (GérerLlama) Bridge --
+const callLocalLlama = async (prompt: string): Promise<{ content: string, cost: number }> => {
+    try {
+        const response = await fetch('http://localhost:3001/api/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-gererllama-key': 'gererllama_test'
+            },
+            body: JSON.stringify({ prompt, stream: false })
+        });
+        
+        if (!response.ok) throw new Error("Local Engine Offline");
+        
+        const data = await response.json();
+        // Since it's local, we don't charge credits or we charge a flat minimal fee
+        return { content: data.text || data.response || "", cost: 0.1 };
+    } catch (e) {
+        console.error("Local Llama Failure:", e);
+        throw new Error("Local Engine Room is dark. Is GérerLlama running?");
+    }
+};
 
 // Helper to get configured AI instances and models
 const getConfig = (tier: string = 'free') => {
@@ -207,6 +230,11 @@ export const analyzeStoryConcept = async (spark: string, tier: string = 'free'):
     }
   `;
 
+  if (textModel === 'local-gemma') {
+    const { content, cost } = await callLocalLlama(prompt + "\nRespond with valid JSON ONLY.");
+    return { data: JSON.parse(cleanJson(content)), cost };
+  }
+
   if (!isGeminiModel(textModel)) {
      const provider = isXAIModel(textModel) ? xai : openai;
      const systemPrompt = "You are a creative writing assistant. Respond in valid JSON.";
@@ -267,6 +295,13 @@ export const generateStoryArchitecture = async (
       "toc": [{ "chapter": 1, "title": "...", "summary": "..." }]
     }
   `;
+
+  if (textModel === 'local-gemma') {
+    const { content, cost } = await callLocalLlama(prompt + "\nRespond with valid JSON ONLY.");
+    const data = JSON.parse(cleanJson(content));
+    const chapters: Chapter[] = data.toc.map((c: any) => ({ ...c, content: "", isCompleted: false }));
+    return { data: { characters: data.characters, locations: data.locations || [], toc: chapters }, cost };
+  }
 
   if (!isGeminiModel(textModel)) {
      const provider = isXAIModel(textModel) ? xai : openai;
@@ -440,6 +475,11 @@ export const generateProse = async (
     ${formatInstruction}
     Output ONLY the story content.
   `;
+
+  if (textModel === 'local-gemma') {
+    const { content, cost } = await callLocalLlama(prompt);
+    return { text: content, cost };
+  }
 
   if (!isGeminiModel(textModel)) {
       const provider = isXAIModel(textModel) ? xai : openai;
