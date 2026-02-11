@@ -37,8 +37,9 @@ const callLocalLlama = async (prompt: string): Promise<{ content: string, cost: 
         if (!response.ok) throw new Error("Local Engine Offline");
         
         const data = await response.json();
-        // Since it's local, we don't charge credits or we charge a flat minimal fee
-        return { content: data.text || data.response || "", cost: 0.1 };
+        // Use cleanJson to strip potential markdown code blocks from the engine's response
+        const content = cleanJson(data.text || data.response || "");
+        return { content, cost: 0.1 };
     } catch (e) {
         console.error("Local Llama Failure:", e);
         throw new Error("Local Engine Room is dark. Is GérerLlama running?");
