@@ -12,7 +12,7 @@ interface Stats {
 }
 
 interface ActivityLog {
-    type: 'request' | 'error' | 'token';
+    type: 'request' | 'error' | 'token' | 'complete';
     message: string;
     timestamp: Date;
 }
@@ -54,7 +54,7 @@ const AdminView: React.FC = () => {
         socket.on('activity', (data: any) => {
             const newLog: ActivityLog = {
                 type: data.type,
-                message: data.type === 'request' ? `Prompt: ${data.prompt}...` : data.message,
+                message: data.type === 'request' ? `Prompt: ${data.prompt}...` : (data.text || data.message || "Operation Complete"),
                 timestamp: new Date()
             };
             setLogs(prev => [newLog, ...prev].slice(0, 50));
@@ -65,7 +65,7 @@ const AdminView: React.FC = () => {
 
     const handleSaveSettings = () => {
         localStorage.setItem('gerertales_settings', JSON.stringify(settings));
-        notify("Global Engine Settings Updated.");
+        notify("Global Engine Settings Updated.", "success");
     };
 
     const toggleKey = (key: string) => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
@@ -89,15 +89,15 @@ const AdminView: React.FC = () => {
                 {/* Metrics Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-dark-card border border-dark-border p-6 rounded-2xl">
-                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2">Total Requests</div>
+                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2 font-sans">Total Requests</div>
                         <div className="text-4xl font-serif font-bold text-accent-primary">{stats.requests}</div>
                     </div>
                     <div className="bg-dark-card border border-dark-border p-6 rounded-2xl">
-                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2">Token Flow</div>
+                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2 font-sans">Token Flow</div>
                         <div className="text-4xl font-serif font-bold text-purple-400">{stats.tokens.toLocaleString()}</div>
                     </div>
                     <div className="bg-dark-card border border-dark-border p-6 rounded-2xl">
-                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2">Engine Faults</div>
+                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2 font-sans">Engine Faults</div>
                         <div className="text-4xl font-serif font-bold text-rose-400">{stats.errors}</div>
                     </div>
                 </div>
@@ -113,25 +113,59 @@ const AdminView: React.FC = () => {
                             </div>
 
                             <div className="space-y-6">
+                                {/* Text Model Selection */}
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Active Text Model</label>
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-sans">Active Text Model</label>
                                     <select 
                                         value={settings.textModel}
                                         onChange={(e) => setSettings({...settings, textModel: e.target.value})}
-                                        className="w-full bg-dark-bg border border-dark-border rounded-xl p-3 text-sm text-white focus:border-cobalt outline-none"
+                                        className="w-full bg-dark-bg border border-dark-border rounded-xl p-3 text-sm text-white focus:border-cobalt outline-none font-sans"
                                     >
                                         <option value="local-gemma">GérerLlama (Local Gemma 3)</option>
-                                        <optgroup label="Remote Providers">
+                                        <optgroup label="x.ai (Grok)">
+                                            <option value="grok-4-1-fast-reasoning">Grok 4.1 Fast Reasoning</option>
+                                            <option value="grok-4-1-fast-non-reasoning">Grok 4.1 Fast</option>
+                                            <option value="grok-3">Grok 3</option>
+                                            <option value="grok-3-mini">Grok 3 Mini</option>
+                                            <option value="grok-2-vision-1212">Grok 2 Vision</option>
+                                        </optgroup>
+                                        <optgroup label="Google DeepMind">
                                             <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                                             <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                            <option value="grok-2-latest">Grok 2</option>
+                                        </optgroup>
+                                        <optgroup label="OpenAI">
                                             <option value="gpt-4o">GPT-4o</option>
+                                            <option value="gpt-4o-mini">GPT-4o Mini</option>
                                         </optgroup>
                                     </select>
                                 </div>
 
-                                <div className="space-y-4">
-                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-600 border-b border-dark-border pb-2">Infrastructure Keys</h3>
+                                {/* Image Model Selection */}
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-sans">Illustration Engine</label>
+                                    <select 
+                                        value={settings.imageModel}
+                                        onChange={(e) => setSettings({...settings, imageModel: e.target.value})}
+                                        className="w-full bg-dark-bg border border-dark-border rounded-xl p-3 text-sm text-white focus:border-cobalt outline-none font-sans"
+                                    >
+                                        <optgroup label="Google Imagen">
+                                            <option value="imagen-3">Imagen 3 (Standard)</option>
+                                            <option value="gemini-2.0-flash-exp">Gemini 2.0 (Fast)</option>
+                                        </optgroup>
+                                        <optgroup label="x.ai (Grok Imagine)">
+                                            <option value="grok-imagine-image-pro">Grok Imagine Pro</option>
+                                            <option value="grok-imagine-image">Grok Imagine</option>
+                                            <option value="grok-2-image-1212">Grok 2 Image</option>
+                                        </optgroup>
+                                        <optgroup label="OpenAI DALL-E">
+                                            <option value="dall-e-3">DALL-E 3</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+
+                                <div className="space-y-4 pt-4 border-t border-dark-border">
+                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-600 font-sans">Infrastructure Keys</h3>
                                     
                                     {[
                                         { label: 'Gemini API', key: 'apiKey' },
@@ -140,7 +174,7 @@ const AdminView: React.FC = () => {
                                         { label: 'ElevenLabs API', key: 'elevenLabsApiKey' }
                                     ].map(item => (
                                         <div key={item.key} className="relative">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1 block">{item.label}</label>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1 block font-sans">{item.label}</label>
                                             <input 
                                                 type={showKeys[item.key] ? "text" : "password"}
                                                 value={(settings as any)[item.key] || ''}
@@ -148,7 +182,7 @@ const AdminView: React.FC = () => {
                                                 placeholder="Enter secret key..."
                                                 className="w-full bg-dark-bg border border-dark-border rounded-xl p-3 text-xs text-text-main focus:border-cobalt outline-none font-mono"
                                             />
-                                            <button onClick={() => toggleKey(item.key)} className="absolute right-3 top-7 text-[10px] text-zinc-500 hover:text-white uppercase font-bold">
+                                            <button onClick={() => toggleKey(item.key)} className="absolute right-3 top-7 text-[10px] text-zinc-500 hover:text-white uppercase font-bold font-sans">
                                                 {showKeys[item.key] ? "Hide" : "Show"}
                                             </button>
                                         </div>
@@ -159,24 +193,26 @@ const AdminView: React.FC = () => {
                     </div>
 
                     {/* Live Pulse */}
-                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden flex flex-col h-[600px]">
-                        <div className="px-8 py-5 border-b border-dark-border bg-dark-bg/50">
+                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden flex flex-col h-[700px]">
+                        <div className="px-8 py-5 border-b border-dark-border bg-dark-bg/50 flex justify-between items-center">
                             <h2 className="font-serif font-bold text-lg">Engine Pulse Log</h2>
+                            <button onClick={() => setLogs([])} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-rose-400 font-sans transition-colors">Clear Log</button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 space-y-4 font-mono text-[11px] no-scrollbar">
                             {logs.length === 0 ? (
-                                <div className="text-text-muted italic text-center py-20">Waiting for pulse...</div>
+                                <div className="text-text-muted italic text-center py-20 font-serif">Waiting for pulse...</div>
                             ) : (
                                 logs.map((log, i) => (
                                     <div key={i} className="flex gap-4 py-3 border-b border-dark-border last:border-0 group">
                                         <span className="text-zinc-600 shrink-0">{log.timestamp.toLocaleTimeString()}</span>
                                         <span className={`font-black shrink-0 ${
                                             log.type === 'request' ? 'text-accent-primary' : 
-                                            log.type === 'error' ? 'text-rose-400' : 'text-purple-400'
+                                            log.type === 'error' ? 'text-rose-400' : 
+                                            log.type === 'complete' ? 'text-emerald-400' : 'text-purple-400'
                                         }`}>
                                             {log.type.toUpperCase()}
                                         </span>
-                                        <span className="text-zinc-300 break-all">{log.message}</span>
+                                        <span className="text-zinc-300 break-all leading-relaxed">{log.message}</span>
                                     </div>
                                 ))
                             )}
