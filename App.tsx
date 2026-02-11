@@ -19,7 +19,7 @@ import StoryLibrary from './components/StoryLibrary';
 import UserProfileView from './components/UserProfileView';
 import SettingsView from './components/SettingsView';
 import Auth from './components/Auth';
-import { LandingPage } from './components/LandingPage';
+import LandingPage from './components/LandingPage';
 import AdminView from './components/AdminView';
 import { NotificationProvider } from './services/NotificationContext';
 
