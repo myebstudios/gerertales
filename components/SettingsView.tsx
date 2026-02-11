@@ -4,6 +4,7 @@ import { AppSettings, Theme, TTSProvider, UserProfile } from '../types';
 import SubscriptionPlans from './SubscriptionPlans';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
+import { useNotify } from '../services/NotificationContext';
 
 interface SettingsViewProps {
   onSave: (settings: AppSettings) => void;
@@ -29,6 +30,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfile, onUpdateCredits, user }) => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const { notify } = useNotify();
   const [showKey, setShowKey] = useState(false);
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
   const [showXAIKey, setShowXAIKey] = useState(false);
@@ -59,7 +61,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
   };
 
   const handleTopUp = async (amount: number) => {
-      alert(`Initiating top-up for ${amount} credits... (Redirecting to Stripe)`);
+      notify(`Initiating top-up for ${amount} credits... (Redirecting to Stripe)`);
       try {
           const { data, error } = await supabase.functions.invoke('create-credit-topup', {
               body: { amount, userId: user?.id }

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { supabaseService } from '../services/supabaseService';
 import { useNavigate } from 'react-router-dom';
+import { useNotify } from '../services/NotificationContext';
 
 const Auth: React.FC = () => {
     const [isSignUp, setIsSignUp] = useState(false);
@@ -9,6 +10,7 @@ const Auth: React.FC = () => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const { notify } = useNotify();
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -17,14 +19,14 @@ const Auth: React.FC = () => {
             if (isSignUp) {
                 const { data, error } = await supabaseService.signUpWithEmail(email, password);
                 if (error) throw error;
-                alert('Check your email for the confirmation link!');
+                notify('Check your email for the confirmation link!');
             } else {
                 const { data, error } = await supabaseService.signInWithEmail(email, password);
                 if (error) throw error;
                 navigate('/library');
             }
         } catch (error: any) {
-            alert(error.message);
+            notify(error.message);
         } finally {
             setLoading(false);
         }
@@ -34,7 +36,7 @@ const Auth: React.FC = () => {
         try {
             await supabaseService.signInWithGoogle();
         } catch (error: any) {
-            alert(error.message);
+            notify(error.message);
         }
     };
 

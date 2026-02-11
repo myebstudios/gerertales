@@ -4,6 +4,7 @@ import { Chapter, Story, TTSProvider, StoryComment } from '../types';
 import { jsPDF } from "jspdf";
 import * as GeminiService from '../services/geminiService';
 import { supabaseService } from '../services/supabaseService';
+import { useNotify } from '../services/NotificationContext';
 
 interface StoryBlueprintProps {
   story: Story;
@@ -41,6 +42,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   onRefreshStory
 }) => {
   const chapter = story.toc[currentChapterIndex];
+  const { notify } = useNotify();
 
   // -- Local Stats --
   const wordCount = chapter?.content?.trim() ? chapter.content.trim().split(/\s+/).length : 0;
@@ -72,7 +74,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   }, [story.id, story.isPublic, userId]);
 
   const handleLike = async () => {
-    if (!userId) return alert("Sign in to appreciate this tale!");
+    if (!userId) return notify("Sign in to appreciate this tale!");
     try {
         await supabaseService.likeStory(userId, story.id);
         setHasLiked(true);
@@ -81,7 +83,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   };
 
   const handleRate = async (rating: number) => {
-    if (!userId) return alert("Sign in to rate this tale!");
+    if (!userId) return notify("Sign in to rate this tale!");
     try {
         await supabaseService.rateStory(userId, story.id, rating);
         setUserRating(rating);
@@ -90,7 +92,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   };
 
   const handlePostComment = async () => {
-    if (!userId) return alert("Sign in to leave a comment!");
+    if (!userId) return notify("Sign in to leave a comment!");
     if (!newComment.trim()) return;
 
     setIsPostingComment(true);
@@ -106,11 +108,11 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   };
 
   const handleSaveToLibrary = async () => {
-      if (!userId) return alert("Sign in to save this tale!");
+      if (!userId) return notify("Sign in to save this tale!");
       setIsSavingToLibrary(true);
       try {
           await supabaseService.saveToPersonalLibrary(userId, story.id);
-          alert("Saved to your personal collection!");
+          notify("Saved to your personal collection!");
       } catch (e) { console.error(e); } finally {
           setIsSavingToLibrary(false);
       }
@@ -296,7 +298,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
             audioBufferRef.current = audio;
             playBuffer(audio);
         } else {
-            alert("Could not generate speech. Please check your connection.");
+            notify("Could not generate speech. Please check your connection.");
         }
     } catch (e) {
         console.error("Audio playback error", e);

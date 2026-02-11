@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import { AppSettings } from '../types';
+import { useNotify } from '../services/NotificationContext';
 
 const ENGINE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://gererllama-studio.loca.lt';
 
@@ -34,6 +35,7 @@ const AdminView: React.FC = () => {
     const [stats, setStats] = useState<Stats>({ requests: 0, tokens: 0, errors: 0 });
     const [logs, setLogs] = useState<ActivityLog[]>([]);
     const [isConnected, setIsConnected] = useState(false);
+    const { notify } = useNotify();
     
     // Global AI Settings
     const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -63,7 +65,7 @@ const AdminView: React.FC = () => {
 
     const handleSaveSettings = () => {
         localStorage.setItem('gerertales_settings', JSON.stringify(settings));
-        alert("Global Engine Settings Updated.");
+        notify("Global Engine Settings Updated.");
     };
 
     const toggleKey = (key: string) => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
