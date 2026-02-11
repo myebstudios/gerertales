@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import { AppSettings } from '../types';
 
-const ENGINE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://young-mangos-buy.loca.lt';
+const ENGINE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://gererllama-studio.loca.lt';
 
 interface Stats {
     requests: number;
