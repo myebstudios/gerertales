@@ -328,136 +328,134 @@ const App: React.FC = () => {
   if (authLoading) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted">Loading Studio...</div>;
 
   return (
-    <NotificationProvider>
-      <div className={`flex h-screen w-screen bg-dark-bg text-text-main transition-all duration-500 ${focusMode ? 'focus-mode' : ''}`}>
-        {!focusMode && !['/auth', '/'].includes(location.pathname) && (
-          <AppNavigation 
-              userProfile={userProfile}
-              user={user}
-              onLogin={() => navigate('/auth')}
-          />
-        )}
-        
-        <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings', '/discover'].includes(location.pathname) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
-          <Routes>
-            <Route path="/" element={<LandingPage user={user} />} />
-            <Route path="/auth" element={user ? <Navigate to="/library" /> : <Auth />} />
-            
-            <Route path="/discover" element={
-              <StoryLibrary 
-                stories={[]} // Will fetch public stories in component
-                onSelectStory={handleSelectStory}
-                onCreateNew={() => navigate('/onboarding')}
-                onDeleteStory={() => {}}
-                onImportStory={handleImportStory}
-                onBackupStory={handleBackupStory}
-                isPublicView={true}
-                currentUserId={user?.id}
-              />
-            } />
+    <div className={`flex h-screen w-screen bg-dark-bg text-text-main transition-all duration-500 ${focusMode ? 'focus-mode' : ''}`}>
+      {!focusMode && !['/auth', '/'].includes(location.pathname) && (
+        <AppNavigation 
+            userProfile={userProfile}
+            user={user}
+            onLogin={() => navigate('/auth')}
+        />
+      )}
+      
+      <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings', '/discover'].includes(location.pathname) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
+        <Routes>
+          <Route path="/" element={<LandingPage user={user} />} />
+          <Route path="/auth" element={user ? <Navigate to="/library" /> : <Auth />} />
+          
+          <Route path="/discover" element={
+            <StoryLibrary 
+              stories={[]} // Will fetch public stories in component
+              onSelectStory={handleSelectStory}
+              onCreateNew={() => navigate('/onboarding')}
+              onDeleteStory={() => {}}
+              onImportStory={handleImportStory}
+              onBackupStory={handleBackupStory}
+              isPublicView={true}
+              currentUserId={user?.id}
+            />
+          } />
 
-            <Route path="/library" element={
-              <StoryLibrary 
+          <Route path="/library" element={
+            <StoryLibrary 
+              stories={stories}
+              onSelectStory={handleSelectStory}
+              onCreateNew={() => navigate('/onboarding')}
+              onDeleteStory={handleDeleteStory}
+              onImportStory={handleImportStory}
+              onBackupStory={handleBackupStory}
+              currentUserId={user?.id}
+            />
+          } />
+
+          <Route path="/onboarding" element={
+            <Onboarding 
+                onConfirm={handleCreateStory} 
+                isLoading={isAiProcessing} 
+                onCheckCredits={hasCredits}
+                onDeductCredits={deductCredits}
+                userTier={userTier}
+             />
+          } />
+
+          <Route path="/writing/:storyId" element={
+            currentStory ? (
+                <>
+                    {!focusMode && (
+                        <div className="w-full md:w-2/5 h-full z-10 border-r border-dark-border flex-shrink-0">
+                            <ChatInterface 
+                                messages={messages} 
+                                onSendMessage={handleSendMessage}
+                                isTyping={isAiProcessing}
+                                chapterTitle={currentStory.toc[currentStory.activeChapterIndex]?.title || 'Untitled'}
+                            />
+                        </div>
+                    )}
+                    <div className={`${focusMode ? 'w-full' : 'w-full md:w-3/5'} h-full relative`}>
+                        <StoryBlueprint 
+                            story={currentStory} 
+                            currentChapterIndex={currentStory.activeChapterIndex}
+                            onChapterSelect={(idx) => {
+                                const updated = { ...currentStory, activeChapterIndex: idx };
+                                setStories(prev => prev.map(s => s.id === updated.id ? updated : s));
+                                if (user) supabaseService.saveStory(user.id, updated);
+                            }}
+                            onContentUpdate={handleContentUpdate}
+                            onChapterUpdate={(idx, updates) => {
+                                const updatedChapters = [...currentStory.toc];
+                                updatedChapters[idx] = { ...updatedChapters[idx], ...updates };
+                                const updatedStory = { ...currentStory, toc: updatedChapters };
+                                setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
+                                if (user) supabaseService.saveStory(user.id, updatedStory);
+                            }}
+                            checkCredits={hasCredits}
+                            onDeductCredits={deductCredits}
+                            focusMode={focusMode}
+                            onToggleFocus={() => setFocusMode(!focusMode)}
+                            isOwner={user?.id === currentStory.ownerId}
+                            onTogglePublish={handleTogglePublish}
+                            userId={user?.id}
+                            onRefreshStory={async () => {
+                                if (user) {
+                                    const cloudStories = await supabaseService.getStories(user.id);
+                                    setStories(cloudStories);
+                                }
+                            }}
+                        />
+                    </div>
+                </>
+            ) : <Navigate to="/library" />
+          } />
+
+          <Route path="/profile" element={
+            <UserProfileView 
+                profile={userProfile}
                 stories={stories}
-                onSelectStory={handleSelectStory}
-                onCreateNew={() => navigate('/onboarding')}
-                onDeleteStory={handleDeleteStory}
-                onImportStory={handleImportStory}
-                onBackupStory={handleBackupStory}
-                currentUserId={user?.id}
-              />
-            } />
+                onUpdateProfile={setUserProfile}
+                user={user}
+                onLogout={() => { supabaseService.signOut(); navigate('/auth'); }}
+            />
+          } />
 
-            <Route path="/onboarding" element={
-              <Onboarding 
-                  onConfirm={handleCreateStory} 
-                  isLoading={isAiProcessing} 
-                  onCheckCredits={hasCredits}
-                  onDeductCredits={deductCredits}
-                  userTier={userTier}
-               />
-            } />
+          <Route path="/settings" element={
+            <SettingsView 
+                onSave={() => {}}
+                onCancel={() => navigate('/library')}
+                userProfile={userProfile}
+                onUpdateCredits={(amt) => {
+                    const updated = { ...userProfile, credits: amt };
+                    setUserProfile(updated);
+                    if (user) supabaseService.updateProfile(user.id, updated);
+                }}
+                user={user}
+            />
+          } />
 
-            <Route path="/writing/:storyId" element={
-              currentStory ? (
-                  <>
-                      {!focusMode && (
-                          <div className="w-full md:w-2/5 h-full z-10 border-r border-dark-border flex-shrink-0">
-                              <ChatInterface 
-                                  messages={messages} 
-                                  onSendMessage={handleSendMessage}
-                                  isTyping={isAiProcessing}
-                                  chapterTitle={currentStory.toc[currentStory.activeChapterIndex]?.title || 'Untitled'}
-                              />
-                          </div>
-                      )}
-                      <div className={`${focusMode ? 'w-full' : 'w-full md:w-3/5'} h-full relative`}>
-                          <StoryBlueprint 
-                              story={currentStory} 
-                              currentChapterIndex={currentStory.activeChapterIndex}
-                              onChapterSelect={(idx) => {
-                                  const updated = { ...currentStory, activeChapterIndex: idx };
-                                  setStories(prev => prev.map(s => s.id === updated.id ? updated : s));
-                                  if (user) supabaseService.saveStory(user.id, updated);
-                              }}
-                              onContentUpdate={handleContentUpdate}
-                              onChapterUpdate={(idx, updates) => {
-                                  const updatedChapters = [...currentStory.toc];
-                                  updatedChapters[idx] = { ...updatedChapters[idx], ...updates };
-                                  const updatedStory = { ...currentStory, toc: updatedChapters };
-                                  setStories(prev => prev.map(s => s.id === updatedStory.id ? updatedStory : s));
-                                  if (user) supabaseService.saveStory(user.id, updatedStory);
-                              }}
-                              checkCredits={hasCredits}
-                              onDeductCredits={deductCredits}
-                              focusMode={focusMode}
-                              onToggleFocus={() => setFocusMode(!focusMode)}
-                              isOwner={user?.id === currentStory.ownerId}
-                              onTogglePublish={handleTogglePublish}
-                              userId={user?.id}
-                              onRefreshStory={async () => {
-                                  if (user) {
-                                      const cloudStories = await supabaseService.getStories(user.id);
-                                      setStories(cloudStories);
-                                  }
-                              }}
-                          />
-                      </div>
-                  </>
-              ) : <Navigate to="/library" />
-            } />
+          <Route path="/admin" element={<AdminView />} />
 
-            <Route path="/profile" element={
-              <UserProfileView 
-                  profile={userProfile}
-                  stories={stories}
-                  onUpdateProfile={setUserProfile}
-                  user={user}
-                  onLogout={() => { supabaseService.signOut(); navigate('/auth'); }}
-              />
-            } />
-
-            <Route path="/settings" element={
-              <SettingsView 
-                  onSave={() => {}}
-                  onCancel={() => navigate('/library')}
-                  userProfile={userProfile}
-                  onUpdateCredits={(amt) => {
-                      const updated = { ...userProfile, credits: amt };
-                      setUserProfile(updated);
-                      if (user) supabaseService.updateProfile(user.id, updated);
-                  }}
-                  user={user}
-              />
-            } />
-
-            <Route path="/admin" element={<AdminView />} />
-
-            <Route path="*" element={<Navigate to={user ? "/library" : "/auth"} />} />
-          </Routes>
-        </div>
+          <Route path="*" element={<Navigate to={user ? "/library" : "/auth"} />} />
+        </Routes>
       </div>
-    </NotificationProvider>
+    </div>
   );
 };
 
