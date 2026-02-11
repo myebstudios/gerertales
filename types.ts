@@ -85,12 +85,15 @@ export type Theme = 'nordic-dark' | 'midnight' | 'paper-light';
 export type TTSProvider = 'ai' | 'browser';
 
 export interface AppSettings {
-  apiKey: string;
+  apiKey: string; // Gemini
   openAiApiKey?: string;
+  xAIApiKey?: string;
+  elevenLabsApiKey?: string;
   textModel: string;
   imageModel: string;
   imageResolution: 'Low' | '1K' | '2K' | '4K';
   ttsModel: string;
+  elevenLabsVoiceId?: string;
   ttsProvider: TTSProvider;
   theme: Theme;
 }

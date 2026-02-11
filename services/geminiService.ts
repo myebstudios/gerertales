@@ -6,57 +6,72 @@ import { Chapter, Character, Location, StoryFormat } from "../types";
 // Defaults
 const FREE_TEXT_MODEL = 'gemini-1.5-flash';
 const PREMIUM_TEXT_MODEL = 'gemini-1.5-pro';
-const DEFAULT_IMAGE_MODEL = 'dall-e-3';
+const DEFAULT_IMAGE_MODEL = 'imagen-3';
 const DEFAULT_TTS_MODEL = 'tts-1';
 
 // Rates (Credits)
-const RATE_INPUT_TOKEN = 0.001;  // 1 credit per 1000 tokens
-const RATE_OUTPUT_TOKEN = 0.004; // 4 credits per 1000 tokens
-const RATE_IMAGE = 20;           // Fixed cost per image
-const RATE_TTS_CHAR = 0.01;      // 1 credit per 100 chars
+const RATE_INPUT_TOKEN = 0.001;  
+const RATE_OUTPUT_TOKEN = 0.004; 
+const RATE_IMAGE = 20;           
+const RATE_TTS_CHAR = 0.01;      
+const RATE_ELEVENLABS_CHAR = 0.05; 
 
 // Helper to check model type
-const isGeminiModel = (model: string) => model.toLowerCase().includes('gemini');
+const isGeminiModel = (model: string) => model.toLowerCase().includes('gemini') || model.toLowerCase().includes('imagen');
+const isXAIModel = (model: string) => model.toLowerCase().includes('grok');
 
 // Helper to get configured AI instances and models
 const getConfig = (tier: string = 'free') => {
   let settings = { 
     apiKey: '', 
     openAiApiKey: '', 
+    xAIApiKey: '',
+    elevenLabsApiKey: '',
     textModel: tier === 'free' ? FREE_TEXT_MODEL : PREMIUM_TEXT_MODEL, 
     imageModel: DEFAULT_IMAGE_MODEL,
     imageResolution: '1K',
-    ttsModel: DEFAULT_TTS_MODEL 
+    ttsModel: DEFAULT_TTS_MODEL,
+    elevenLabsVoiceId: 'cgSgSjJ47ptB6SHCPjD2'
   };
   try {
     const saved = localStorage.getItem('gerertales_settings');
     if (saved) {
       settings = { ...settings, ...JSON.parse(saved) };
     }
-  } catch (e) {
-    // Ignore storage errors
-  }
+  } catch (e) {}
 
-  // Gemini Setup - Prefer user key, fallback to env (which we just updated with the new key)
+  // Sanitize model names to ensure compatibility
+  if (settings.textModel?.includes('gemini-3')) settings.textModel = FREE_TEXT_MODEL;
+
+  // Gemini Setup
   const geminiApiKey = settings.apiKey || import.meta.env.VITE_GEMINI_API_KEY || '';
   const gemini = new GoogleGenAI({ apiKey: geminiApiKey });
   
-  // OpenAI Setup - Prefer user key, fallback to env
+  // OpenAI Setup
   const openAiApiKey = settings.openAiApiKey || import.meta.env.VITE_OPENAI_API_KEY;
   let openai: OpenAI | null = null;
   if (openAiApiKey) {
-      openai = new OpenAI({ 
-          apiKey: openAiApiKey, 
+      openai = new OpenAI({ apiKey: openAiApiKey, dangerouslyAllowBrowser: true });
+  }
+
+  // x.ai Setup
+  const xAIApiKey = settings.xAIApiKey || import.meta.env.VITE_XAI_API_KEY;
+  let xai: OpenAI | null = null;
+  if (xAIApiKey) {
+      xai = new OpenAI({ 
+          apiKey: xAIApiKey, 
+          baseURL: "https://api.x.ai/v1",
           dangerouslyAllowBrowser: true 
       });
   }
   
-  const textModel = settings.textModel || (tier === 'free' ? FREE_TEXT_MODEL : PREMIUM_TEXT_MODEL);
-  
   return {
     gemini,
     openai,
-    textModel: textModel,
+    xai,
+    elevenLabsApiKey: settings.elevenLabsApiKey || import.meta.env.VITE_ELEVENLABS_API_KEY,
+    elevenLabsVoiceId: settings.elevenLabsVoiceId,
+    textModel: settings.textModel || (tier === 'free' ? FREE_TEXT_MODEL : PREMIUM_TEXT_MODEL),
     imageModel: settings.imageModel || DEFAULT_IMAGE_MODEL,
     imageResolution: settings.imageResolution || '1K',
     ttsModel: settings.ttsModel || DEFAULT_TTS_MODEL
@@ -107,7 +122,8 @@ const compressImage = (base64: string): Promise<string> => {
 
 // -- OpenAI Helpers --
 
-const callOpenAIText = async (openai: OpenAI, model: string, systemPrompt: string, userPrompt: string, jsonMode: boolean = false): Promise<{ content: string, cost: number }> => {
+const callAIText = async (openai: OpenAI | null, model: string, systemPrompt: string, userPrompt: string, jsonMode: boolean = false): Promise<{ content: string, cost: number }> => {
+    if (!openai) throw new Error("AI provider not configured.");
     const response = await openai.chat.completions.create({
         model: model,
         messages: [
@@ -130,7 +146,7 @@ const callOpenAIText = async (openai: OpenAI, model: string, systemPrompt: strin
 // -- Safety & Utilities --
 
 const createSafeImagePrompt = async (originalContext: string, type: 'COVER' | 'SCENE', tone: string, tier: string = 'free'): Promise<string> => {
-    const { gemini, openai, textModel } = getConfig(tier);
+    const { gemini, openai, xai, textModel } = getConfig(tier);
     const instructions = `
         You are an art director. I need a visual description for an AI image generator.
         Context: "${originalContext}"
@@ -140,15 +156,16 @@ const createSafeImagePrompt = async (originalContext: string, type: 'COVER' | 'S
     `;
 
     try {
-        if (!isGeminiModel(textModel) && openai) {
-            const res = await callOpenAIText(openai, textModel, "You are a helpful art director.", instructions);
-            return res.content;
-        } else {
+        if (isGeminiModel(textModel)) {
             const response = await gemini.models.generateContent({
                 model: textModel,
-                contents: instructions
+                contents: [{ role: 'user', parts: [{ text: instructions }] }]
             });
             return response.text || "Atmospheric abstract art";
+        } else {
+            const provider = isXAIModel(textModel) ? xai : openai;
+            const res = await callAIText(provider, textModel, "You are a helpful art director.", instructions);
+            return res.content;
         }
     } catch (e) {
         return `Atmospheric ${tone} art, abstract style`;
@@ -177,7 +194,7 @@ const chunkText = (text: string, maxLength: number = 4000): string[] => {
  * Step 1: Analyze the spark and suggest settings.
  */
 export const analyzeStoryConcept = async (spark: string, tier: string = 'free'): Promise<{ data: { title: string; tone: string; recommendedChapters: number; recommendedFormat: StoryFormat }, cost: number }> => {
-  const { gemini, openai, textModel } = getConfig(tier);
+  const { gemini, openai, xai, textModel } = getConfig(tier);
   
   const prompt = `
     Analyze this story idea ("Spark"): "${spark}".
@@ -185,33 +202,24 @@ export const analyzeStoryConcept = async (spark: string, tier: string = 'free'):
     {
       "title": "A compelling Title",
       "tone": "A distinct Tone",
-      "recommendedChapters": 5 (Integer between 3-12),
-      "recommendedFormat": "Novel" (One of: Novel, Short Story, Screenplay, Comic Script, Webtoon, Children's Book, Educational Story)
+      "recommendedChapters": 5,
+      "recommendedFormat": "Novel"
     }
   `;
 
-  if (!isGeminiModel(textModel) && openai) {
+  if (!isGeminiModel(textModel)) {
+     const provider = isXAIModel(textModel) ? xai : openai;
      const systemPrompt = "You are a creative writing assistant. Respond in valid JSON.";
-     const { content, cost } = await callOpenAIText(openai, textModel, systemPrompt, prompt, true);
+     const { content, cost } = await callAIText(provider, textModel, systemPrompt, prompt, true);
      return { data: JSON.parse(cleanJson(content)), cost };
   }
 
   // Gemini
   const response = await gemini.models.generateContent({
     model: textModel,
-    contents: prompt,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          tone: { type: Type.STRING },
-          recommendedChapters: { type: Type.INTEGER },
-          recommendedFormat: { type: Type.STRING, enum: ['Novel', 'Short Story', 'Screenplay', 'Comic Script', 'Webtoon', 'Children\'s Book', 'Educational Story'] },
-        },
-        required: ['title', 'tone', 'recommendedChapters', 'recommendedFormat']
-      }
+      responseMimeType: "application/json"
     }
   });
 
@@ -244,7 +252,7 @@ export const generateStoryArchitecture = async (
   chapterCount: number,
   tier: string = 'free'
 ): Promise<{ data: { characters: Character[]; locations: Location[]; toc: Chapter[] }, cost: number }> => {
-  const { gemini, openai, textModel } = getConfig(tier);
+  const { gemini, openai, xai, textModel } = getConfig(tier);
 
   const prompt = `
     Story Idea: "${spark}"
@@ -260,9 +268,10 @@ export const generateStoryArchitecture = async (
     }
   `;
 
-  if (!isGeminiModel(textModel) && openai) {
+  if (!isGeminiModel(textModel)) {
+     const provider = isXAIModel(textModel) ? xai : openai;
      const systemPrompt = `You are a story architect. Respond in valid JSON.`;
-     const { content, cost } = await callOpenAIText(openai, textModel, systemPrompt, prompt, true);
+     const { content, cost } = await callAIText(provider, textModel, systemPrompt, prompt, true);
      const data = JSON.parse(cleanJson(content));
      const chapters: Chapter[] = data.toc.map((c: any) => ({ ...c, content: "", isCompleted: false }));
      return { data: { characters: data.characters, locations: data.locations || [], toc: chapters }, cost };
@@ -271,51 +280,9 @@ export const generateStoryArchitecture = async (
   // Gemini
   const response = await gemini.models.generateContent({
     model: textModel,
-    contents: prompt,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          characters: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                role: { type: Type.STRING },
-                trait: { type: Type.STRING },
-                description: { type: Type.STRING },
-              },
-              required: ['name', 'role', 'trait']
-            }
-          },
-          locations: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                description: { type: Type.STRING },
-              },
-              required: ['name', 'description']
-            }
-          },
-          toc: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                chapter: { type: Type.INTEGER },
-                title: { type: Type.STRING },
-                summary: { type: Type.STRING },
-              },
-              required: ['chapter', 'title', 'summary']
-            }
-          }
-        },
-        required: ['characters', 'locations', 'toc']
-      }
+      responseMimeType: "application/json"
     }
   });
 
@@ -362,15 +329,13 @@ export const generateCoverImage = async (title: string, tone: string, spark: str
         url = b64 ? `data:image/png;base64,${b64}` : undefined;
     } else {
         const config: any = { imageConfig: { aspectRatio: "3:4" } };
-        // Apply resolution setting if model is compatible
-        if (imageModel === 'gemini-3-pro-image-preview') {
-            // For Low, we rely on client side compression, so request 1K default
+        if (imageModel.includes('preview') || imageModel.includes('2.0')) {
             config.imageConfig.imageSize = imageResolution === 'Low' ? '1K' : imageResolution;
         }
 
         const response = await gemini.models.generateContent({
             model: imageModel,
-            contents: { parts: [{ text: safeVisualDescription }] },
+            contents: [{ role: 'user', parts: [{ text: safeVisualDescription }] }],
             config: config
         });
 
@@ -381,7 +346,6 @@ export const generateCoverImage = async (title: string, tone: string, spark: str
         }
     }
 
-    // Apply Client-side compression if Low resolution is selected
     if (url && imageResolution === 'Low') {
         url = await compressImage(url);
     }
@@ -417,15 +381,13 @@ export const generateChapterBanner = async (chapterTitle: string, chapterSummary
         url = b64 ? `data:image/png;base64,${b64}` : undefined;
     } else {
         const config: any = { imageConfig: { aspectRatio: "16:9" } };
-        // Apply resolution setting if model is compatible
-        if (imageModel === 'gemini-3-pro-image-preview') {
-            // For Low, we rely on client side compression, so request 1K default
+        if (imageModel.includes('preview') || imageModel.includes('2.0')) {
             config.imageConfig.imageSize = imageResolution === 'Low' ? '1K' : imageResolution;
         }
 
         const response = await gemini.models.generateContent({
             model: imageModel,
-            contents: { parts: [{ text: safeVisualDescription }] },
+            contents: [{ role: 'user', parts: [{ text: safeVisualDescription }] }],
             config: config
         });
 
@@ -436,7 +398,6 @@ export const generateChapterBanner = async (chapterTitle: string, chapterSummary
         }
     }
 
-    // Apply Client-side compression if Low resolution is selected
     if (url && imageResolution === 'Low') {
         url = await compressImage(url);
     }
@@ -459,7 +420,7 @@ export const generateProse = async (
   instruction: string,
   tier: string = 'free'
 ): Promise<{ text: string, cost: number }> => {
-  const { gemini, openai, textModel } = getConfig(tier);
+  const { gemini, openai, xai, textModel } = getConfig(tier);
 
   const context = `
     Current Chapter: ${currentChapter.title}
@@ -471,7 +432,6 @@ export const generateProse = async (
   let formatInstruction = "Write standard prose.";
   if (format === 'Screenplay') formatInstruction = "Write in standard Screenplay format.";
   if (format === 'Comic Script') formatInstruction = "Write in Comic Script format.";
-  // ... other formats
 
   const prompt = `
     ${context}
@@ -481,7 +441,10 @@ export const generateProse = async (
     Output ONLY the story content.
   `;
 
-  if (!isGeminiModel(textModel) && openai) {
+  if (!isGeminiModel(textModel)) {
+      const provider = isXAIModel(textModel) ? xai : openai;
+      if (!provider) throw new Error("Selected provider is not configured.");
+      
       const messages: any[] = history.map(msg => ({
           role: msg.role === 'model' ? 'assistant' : 'user',
           content: msg.text
@@ -489,7 +452,7 @@ export const generateProse = async (
       messages.unshift({ role: "system", content: "You are a co-writer." });
       messages.push({ role: "user", content: prompt });
 
-      const response = await openai.chat.completions.create({
+      const response = await provider.chat.completions.create({
           model: textModel,
           messages: messages
       });
@@ -519,12 +482,39 @@ export const generateProse = async (
  * TTS: Generate speech.
  */
 export const generateSpeech = async (text: string, voiceName: string = 'Kore', tier: string = 'free'): Promise<{ audio: AudioBuffer | null, cost: number }> => {
-  const { gemini, openai, ttsModel } = getConfig(tier);
+  const { gemini, openai, ttsModel, elevenLabsApiKey, elevenLabsVoiceId } = getConfig(tier);
   const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
+  
+  // Use ElevenLabs if configured
+  if (elevenLabsApiKey) {
+    console.log("Using ElevenLabs TTS...");
+    try {
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenLabsVoiceId}?output_format=pcm_24000`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'xi-api-key': elevenLabsApiKey
+            },
+            body: JSON.stringify({
+                text: text,
+                model_id: "eleven_multilingual_v2",
+                voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+            })
+        });
+
+        if (!response.ok) throw new Error(`ElevenLabs error: ${response.statusText}`);
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await decodeAudioData(new Uint8Array(arrayBuffer), outputAudioContext, 24000, 1);
+        const cost = Math.round((text.length * RATE_ELEVENLABS_CHAR) * 100) / 100;
+        return { audio: audioBuffer, cost };
+    } catch (e) {
+        console.error("ElevenLabs failed, falling back...", e);
+    }
+  }
+
   const textChunks = chunkText(text, 3500); 
   const audioBuffers: AudioBuffer[] = [];
-  
-  // Estimate cost by char count
   const estimatedCost = Math.round((text.length * RATE_TTS_CHAR) * 100) / 100;
 
   try {

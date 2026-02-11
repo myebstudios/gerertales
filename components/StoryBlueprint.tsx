@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Chapter, Story, TTSProvider } from '../types';
+import { Chapter, Story, TTSProvider, StoryComment } from '../types';
 import { jsPDF } from "jspdf";
 import * as GeminiService from '../services/geminiService';
+import { supabaseService } from '../services/supabaseService';
 
 interface StoryBlueprintProps {
   story: Story;
@@ -57,6 +58,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   const [newComment, setNewComment] = useState('');
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [userRating, setUserRating] = useState(0);
+  const [hasLiked, setHasLiked] = useState(false);
   const [isSavingToLibrary, setIsSavingToLibrary] = useState(false);
 
   // Fetch comments and social status
@@ -170,15 +172,14 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
     audioBufferRef.current = null;
     
     // Check and generate banner if missing
-    if (chapter && !chapter.bannerImage && onChapterUpdate) {
-        // Use a unique key for the ref set (chapter index in this story context)
+    if (chapter && !chapter.bannerImage && onChapterUpdate && isOwner) {
         if (!isGeneratingBannerRef.current.has(currentChapterIndex)) {
-             if (checkCredits()) {
-                 isGeneratingBannerRef.current.add(currentChapterIndex);
-                 setIsBannerLoading(true);
-                 
-                 // Async generation
-                 (async () => {
+             // Add a small delay to prevent rapid-fire generation
+             const timer = setTimeout(async () => {
+                 if (!isGeneratingBannerRef.current.has(currentChapterIndex) && checkCredits()) {
+                     isGeneratingBannerRef.current.add(currentChapterIndex);
+                     setIsBannerLoading(true);
+                     
                      try {
                          const { url, cost } = await GeminiService.generateChapterBanner(
                              chapter.title,
@@ -195,13 +196,13 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                      } finally {
                          setIsBannerLoading(false);
                      }
-                 })();
-             }
+                 }
+             }, 2000);
+             return () => clearTimeout(timer);
         }
     } else {
         setIsBannerLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChapterIndex, story.id]);
 
   // -- Audio Logic --
@@ -738,10 +739,12 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                       step="0.1"
                       value={playbackProgress}
                       onChange={handleSeek}
-                      disabled={ttsProvider === 'browser'}
-                      className="w-full h-1 bg-zinc-800 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cobalt [&::-webkit-slider-thumb]:shadow-lg hover:[&::-webkit-slider-thumb]:scale-150 transition-all"
+                      disabled={ttsProvider === 'browser' || isLoadingAudio}
+                      className={`w-full h-1 rounded-full appearance-none transition-all
+                        ${ttsProvider === 'browser' ? 'bg-zinc-900 cursor-not-allowed' : 'bg-zinc-800 cursor-pointer'}
+                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cobalt [&::-webkit-slider-thumb]:shadow-lg hover:[&::-webkit-slider-thumb]:scale-150`}
                       style={{
-                          backgroundImage: `linear-gradient(to right, var(--color-cobalt) ${playbackProgress}%, transparent ${playbackProgress}%)`
+                          backgroundImage: ttsProvider === 'browser' ? 'none' : `linear-gradient(to right, var(--color-cobalt) ${playbackProgress}%, transparent ${playbackProgress}%)`
                       }}
                   />
               </div>

@@ -16,10 +16,13 @@ interface SettingsViewProps {
 const DEFAULT_SETTINGS: AppSettings = {
   apiKey: '',
   openAiApiKey: '',
-  textModel: 'gemini-3-flash-preview',
-  imageModel: 'gemini-2.5-flash-image',
+  xAIApiKey: '',
+  elevenLabsApiKey: '',
+  textModel: 'gemini-1.5-flash',
+  imageModel: 'imagen-3',
   imageResolution: '1K',
-  ttsModel: 'gemini-2.5-flash-preview-tts',
+  ttsModel: 'tts-1',
+  elevenLabsVoiceId: 'cgSgSjJ47ptB6SHCPjD2',
   ttsProvider: 'ai',
   theme: 'nordic-dark'
 };
@@ -28,6 +31,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [showKey, setShowKey] = useState(false);
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
+  const [showXAIKey, setShowXAIKey] = useState(false);
+  const [showElevenLabsKey, setShowElevenLabsKey] = useState(false);
   const [creditsInput, setCreditsInput] = useState<number>(userProfile?.credits || 0);
 
   useEffect(() => {
@@ -54,7 +59,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
   };
 
   const handleTopUp = async (amount: number) => {
-      // In a real app, this would trigger a Stripe Checkout for a specific amount of credits
       alert(`Initiating top-up for ${amount} credits... (Redirecting to Stripe)`);
       try {
           const { data, error } = await supabase.functions.invoke('create-credit-topup', {
@@ -203,13 +207,35 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
                                 className="w-full bg-zinc-900 border border-white/5 rounded-2xl p-4 text-sm text-white focus:border-cobalt outline-none appearance-none cursor-pointer hover:bg-zinc-800 transition-colors"
                             >
                                 <optgroup label="Google DeepMind">
-                                    <option value="gemini-3-flash-preview">Gemini 3.0 Flash (Fastest)</option>
-                                    <option value="gemini-3-pro-preview">Gemini 3.0 Pro (Intelligent)</option>
+                                    <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                    <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                </optgroup>
+                                <optgroup label="x.ai">
+                                    <option value="grok-2-latest">Grok 2</option>
+                                    <option value="grok-beta">Grok Beta</option>
                                 </optgroup>
                                 <optgroup label="OpenAI">
                                     <option value="gpt-4o">GPT-4o</option>
                                     <option value="gpt-4o-mini">GPT-4o Mini</option>
                                 </optgroup>
+                            </select>
+                        </div>
+
+                        {/* Image Model */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-white/5">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Illustration Model</label>
+                                <p className="text-xs text-zinc-600 leading-relaxed">The visual engine used for covers and scene banners.</p>
+                            </div>
+                            <select 
+                                value={settings.imageModel}
+                                onChange={(e) => handleChange('imageModel', e.target.value)}
+                                className="w-full bg-zinc-900 border border-white/5 rounded-2xl p-4 text-sm text-white focus:border-cobalt outline-none appearance-none cursor-pointer hover:bg-zinc-800 transition-colors"
+                            >
+                                <option value="imagen-3">Imagen 3 (Recommended)</option>
+                                <option value="gemini-2.0-flash-exp">Gemini 2.0 (Fast)</option>
+                                <option value="dall-e-3">DALL-E 3 (Artistic)</option>
                             </select>
                         </div>
 
@@ -235,18 +261,64 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
 
                         {/* Custom Keys */}
                         <div className="space-y-6 pt-10 border-t border-white/5">
-                            <div className="relative group">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-3 block">Google API Key (Optional)</label>
-                                <input 
-                                    type={showKey ? "text" : "password"}
-                                    value={settings.apiKey}
-                                    onChange={(e) => handleChange('apiKey', e.target.value)}
-                                    placeholder="AIzaSy..."
-                                    className="w-full bg-zinc-900/50 border border-white/5 rounded-2xl p-4 text-sm text-text-main focus:border-cobalt focus:bg-zinc-900 outline-none font-mono transition-all"
-                                />
-                                <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-10 text-zinc-600 hover:text-white transition-colors">
-                                    {showKey ? <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg> : <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>}
-                                </button>
+                            <h4 className="text-xs font-bold text-zinc-400">Bring Your Own Keys</h4>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="relative">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-2 block">Gemini Key</label>
+                                    <input 
+                                        type={showKey ? "text" : "password"}
+                                        value={settings.apiKey}
+                                        onChange={(e) => handleChange('apiKey', e.target.value)}
+                                        placeholder="AIzaSy..."
+                                        className="w-full bg-zinc-900/50 border border-white/5 rounded-2xl p-4 text-xs text-text-main focus:border-cobalt outline-none font-mono"
+                                    />
+                                    <button onClick={() => setShowKey(!showKey)} className="absolute right-4 top-9 text-zinc-600 hover:text-white">
+                                        {showKey ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+
+                                <div className="relative">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-2 block">OpenAI Key</label>
+                                    <input 
+                                        type={showOpenAiKey ? "text" : "password"}
+                                        value={settings.openAiApiKey || ''}
+                                        onChange={(e) => handleChange('openAiApiKey', e.target.value)}
+                                        placeholder="sk-..."
+                                        className="w-full bg-zinc-900/50 border border-white/5 rounded-2xl p-4 text-xs text-text-main focus:border-cobalt outline-none font-mono"
+                                    />
+                                    <button onClick={() => setShowOpenAiKey(!showOpenAiKey)} className="absolute right-4 top-9 text-zinc-600 hover:text-white">
+                                        {showOpenAiKey ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+
+                                <div className="relative">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-2 block">x.ai Key</label>
+                                    <input 
+                                        type={showXAIKey ? "text" : "password"}
+                                        value={settings.xAIApiKey || ''}
+                                        onChange={(e) => handleChange('xAIApiKey', e.target.value)}
+                                        placeholder="xai-..."
+                                        className="w-full bg-zinc-900/50 border border-white/5 rounded-2xl p-4 text-xs text-text-main focus:border-cobalt outline-none font-mono"
+                                    />
+                                    <button onClick={() => setShowXAIKey(!showXAIKey)} className="absolute right-4 top-9 text-zinc-600 hover:text-white">
+                                        {showXAIKey ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+
+                                <div className="relative">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600 mb-2 block">ElevenLabs Key</label>
+                                    <input 
+                                        type={showElevenLabsKey ? "text" : "password"}
+                                        value={settings.elevenLabsApiKey || ''}
+                                        onChange={(e) => handleChange('elevenLabsApiKey', e.target.value)}
+                                        placeholder="Key..."
+                                        className="w-full bg-zinc-900/50 border border-white/5 rounded-2xl p-4 text-xs text-text-main focus:border-cobalt outline-none font-mono"
+                                    />
+                                    <button onClick={() => setShowElevenLabsKey(!showElevenLabsKey)} className="absolute right-4 top-9 text-zinc-600 hover:text-white">
+                                        {showElevenLabsKey ? "Hide" : "Show"}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

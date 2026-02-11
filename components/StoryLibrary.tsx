@@ -55,8 +55,16 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDele
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-60" />
 
             {/* Chapter Badge */}
-            <div className="absolute top-5 right-5 bg-white/10 backdrop-blur-xl text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-white/20 uppercase tracking-[0.15em]">
-                {story.toc?.filter(c => c.content.length > 0).length || 0}/{story.toc?.length || 0} CH
+            <div className="absolute top-5 right-5 flex flex-col items-end gap-2">
+                <div className="bg-white/10 backdrop-blur-xl text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-white/20 uppercase tracking-[0.15em]">
+                    {story.toc?.filter(c => c.content.length > 0).length || 0}/{story.toc?.length || 0} CH
+                </div>
+                {story.ownerId === currentUserId && (
+                    <div className={`text-[8px] font-black px-2 py-1 rounded-md border uppercase tracking-widest backdrop-blur-md
+                        ${story.isPublic ? 'bg-cobalt/20 border-cobalt/30 text-cobalt' : 'bg-white/5 border-white/10 text-zinc-500'}`}>
+                        {story.isPublic ? 'Published' : 'Draft'}
+                    </div>
+                )}
             </div>
 
             {/* Social Stats Overlay */}

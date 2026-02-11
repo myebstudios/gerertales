@@ -19,6 +19,7 @@ import UserProfileView from './components/UserProfileView';
 import SettingsView from './components/SettingsView';
 import Auth from './components/Auth';
 import LandingPage from './components/LandingPage';
+import AdminView from './components/AdminView';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -113,6 +114,24 @@ const App: React.FC = () => {
   }, [location.pathname]);
 
   const currentStory = stories.find(s => s.id === activeStoryId);
+  
+  // Handle direct navigation to writing/:storyId
+  useEffect(() => {
+    const pathParts = location.pathname.split('/');
+    if (pathParts[1] === 'writing' && pathParts[2]) {
+        const storyId = pathParts[2];
+        if (!activeStoryId || activeStoryId !== storyId) {
+            setActiveStoryId(storyId);
+            if (!stories.find(s => s.id === storyId)) {
+                // Fetch from Supabase
+                supabaseService.getStoryById(storyId).then(story => {
+                    if (story) setStories(prev => [story, ...prev]);
+                });
+            }
+        }
+    }
+  }, [location.pathname]);
+
   const userTier = userProfile.subscriptionTier || 'free';
 
   // -- Credit Management Helper --
@@ -132,16 +151,17 @@ const App: React.FC = () => {
   };
 
   // -- Navigation Handlers --
-  const handleSelectStory = (story: Story) => {
-    if (!user) {
-        navigate('/auth');
-        return;
+  const handleSelectStory = async (story: Story) => {
+    // If selecting from public view, we might not have it in local state
+    if (!stories.find(s => s.id === story.id)) {
+        setStories(prev => [story, ...prev]);
     }
+    
     setActiveStoryId(story.id);
     setMessages([{
         id: 'restore',
         role: 'model',
-        text: `Welcome back to "${story.title}". We are currently at Chapter ${story.activeChapterIndex + 1}.`
+        text: `Welcome to "${story.title}". We are currently at Chapter ${story.activeChapterIndex + 1}.`
     }]);
     navigate(`/writing/${story.id}`);
   };
@@ -426,6 +446,8 @@ const App: React.FC = () => {
                 user={user}
             />
           } />
+
+          <Route path="/admin" element={<AdminView />} />
 
           <Route path="*" element={<Navigate to={user ? "/library" : "/auth"} />} />
         </Routes>

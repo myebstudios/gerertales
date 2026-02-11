@@ -9,6 +9,8 @@ This document outlines the structural plan to transform GérerTales from a proto
     - [x] Secure API key management.
     - [x] User subscription status check before story generation.
     - [x] Webhooks to handle successful payments.
+- [x] **Multi-LLM Support:** Added Gemini, OpenAI, and **x.ai (Grok)**.
+- [x] **Advanced TTS:** Integrated **ElevenLabs** for high-fidelity narration.
 - [x] **User Dashboard:** A simple view for users to manage their subscription and see their saved stories.
 
 ## Phase 2: The Landing Page (Immediate Next Step)

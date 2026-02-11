@@ -141,9 +141,9 @@ export const supabaseService = {
           .from('stories')
           .select(`
             *,
-            likes_count:story_likes(count),
-            comments_count:story_comments(count),
-            rating_avg:story_ratings(rating.avg())
+            story_likes(count),
+            story_comments(count),
+            story_ratings(rating)
           `)
           .eq('is_public', true)
           .order('published_at', { ascending: false });
@@ -154,16 +154,52 @@ export const supabaseService = {
         }
         
         console.log(`Fetched ${data?.length || 0} public stories.`);
-        return data.map(s => ({
-          ...supabaseService._mapStory(s),
-          likesCount: s.likes_count?.[0]?.count || 0,
-          commentsCount: s.comments_count?.[0]?.count || 0,
-          ratingAverage: s.rating_avg?.[0]?.avg || 0
-        }));
+        return data.map(s => {
+          const mapped = this._mapStory(s);
+          const ratings = s.story_ratings || [];
+          const avg = ratings.length > 0 
+            ? ratings.reduce((acc: number, r: any) => acc + r.rating, 0) / ratings.length 
+            : 0;
+
+          return {
+            ...mapped,
+            likesCount: s.story_likes?.[0]?.count || 0,
+            commentsCount: s.story_comments?.[0]?.count || 0,
+            ratingAverage: avg
+          };
+        });
     } catch (e) {
         console.error("Public fetch failed completely:", e);
         return [];
     }
+  },
+
+  async getStoryById(storyId: string): Promise<Story | null> {
+    const { data, error } = await supabase
+      .from('stories')
+      .select(`
+        *,
+        story_likes(count),
+        story_comments(count),
+        story_ratings(rating)
+      `)
+      .eq('id', storyId)
+      .single();
+
+    if (error) return null;
+
+    const mapped = this._mapStory(data);
+    const ratings = data.story_ratings || [];
+    const avg = ratings.length > 0 
+      ? ratings.reduce((acc: number, r: any) => acc + r.rating, 0) / ratings.length 
+      : 0;
+
+    return {
+      ...mapped,
+      likesCount: data.story_likes?.[0]?.count || 0,
+      commentsCount: data.story_comments?.[0]?.count || 0,
+      ratingAverage: avg
+    };
   },
 
   _mapStory(s: any): Story {
