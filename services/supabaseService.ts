@@ -212,7 +212,8 @@ export const supabaseService = {
             *,
             story_likes(count),
             story_comments(count),
-            story_ratings(rating)
+            story_ratings(rating),
+            profiles(name)
           `)
           .eq('is_public', true)
           .order('published_at', { ascending: false });
@@ -250,7 +251,8 @@ export const supabaseService = {
         *,
         story_likes(count),
         story_comments(count),
-        story_ratings(rating)
+        story_ratings(rating),
+        profiles(name)
       `)
       .eq('id', storyId)
       .single();
@@ -275,6 +277,7 @@ export const supabaseService = {
     return {
       id: s.id,
       ownerId: s.owner_id,
+      ownerName: s.profiles?.name,
       title: s.title,
       spark: s.spark,
       tone: s.tone,
