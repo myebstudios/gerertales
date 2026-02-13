@@ -1,1 +1,2 @@
-/* /index.html 200
+/x-api/*  https://api.x.ai/v1/:splat  200!
+/*  /index.html  200

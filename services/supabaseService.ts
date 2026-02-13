@@ -58,33 +58,93 @@ export const supabaseService = {
     }
 
     return {
+      id: data.id,
       name: data.name,
       bio: data.bio,
       avatarColor: data.avatar_color,
+      avatarUrl: data.avatar_url,
       joinedDate: new Date(data.joined_date).getTime(),
       credits: data.credits,
       stripeCustomerId: data.stripe_customer_id,
       subscriptionStatus: data.subscription_status,
-      subscriptionTier: data.subscription_tier
+      subscriptionTier: data.subscription_tier,
+      isAdmin: data.is_admin,
+      isSuperAdmin: data.is_super_admin,
+      role: data.role
     };
   },
 
-  async updateProfile(userId: string, profile: UserProfile) {
+  async updateProfile(userId: string, profile: Partial<UserProfile>) {
+    // Only update fields provided
+    const updateData: any = { id: userId };
+    if (profile.name !== undefined) updateData.name = profile.name;
+    if (profile.bio !== undefined) updateData.bio = profile.bio;
+    if (profile.avatarColor !== undefined) updateData.avatar_color = profile.avatarColor;
+    if (profile.avatarUrl !== undefined) updateData.avatar_url = profile.avatarUrl;
+    if (profile.joinedDate !== undefined) updateData.joined_date = new Date(profile.joinedDate).toISOString();
+    if (profile.credits !== undefined) updateData.credits = profile.credits;
+    if (profile.stripeCustomerId !== undefined) updateData.stripe_customer_id = profile.stripeCustomerId;
+    if (profile.subscriptionStatus !== undefined) updateData.subscription_status = profile.subscriptionStatus;
+    if (profile.subscriptionTier !== undefined) updateData.subscription_tier = profile.subscriptionTier;
+    
+    // Safety check: is_admin and is_super_admin should ideally not be updated via this common method 
+    // from a regular user's session, but for now we keep the logic if it's explicitly passed.
+    if (profile.isAdmin !== undefined) updateData.is_admin = profile.isAdmin;
+    if (profile.isSuperAdmin !== undefined) updateData.is_super_admin = profile.isSuperAdmin;
+    if (profile.role !== undefined) updateData.role = profile.role;
+
     const { error } = await supabase
       .from('profiles')
-      .upsert({
-        id: userId,
-        name: profile.name,
-        bio: profile.bio,
-        avatar_color: profile.avatarColor,
-        joined_date: new Date(profile.joinedDate).toISOString(),
-        credits: profile.credits,
-        stripe_customer_id: profile.stripeCustomerId,
-        subscription_status: profile.subscriptionStatus || 'inactive',
-        subscription_tier: profile.subscriptionTier || 'free'
-      });
+      .upsert(updateData);
 
     if (error) throw error;
+  },
+
+  async getAllProfiles(): Promise<UserProfile[]> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('joined_date', { ascending: false });
+
+    if (error) throw error;
+
+    return data.map(d => ({
+      id: d.id,
+      name: d.name,
+      bio: d.bio,
+      avatarColor: d.avatar_color,
+      avatarUrl: d.avatar_url,
+      joinedDate: new Date(d.joined_date).getTime(),
+      credits: d.credits,
+      stripeCustomerId: d.stripe_customer_id,
+      subscriptionStatus: d.subscription_status,
+      subscriptionTier: d.subscription_tier,
+      isAdmin: d.is_admin,
+      isSuperAdmin: d.is_super_admin,
+      role: d.role
+    }));
+  },
+
+  async logAudit(userId: string | undefined, type: string, message: string, metadata: any = {}) {
+      const { error } = await supabase
+        .from('audit_logs')
+        .insert({
+            user_id: userId,
+            type,
+            message,
+            metadata
+        });
+      if (error) console.error("Audit log failed:", error);
+  },
+
+  async getAuditLogs(): Promise<any[]> {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data;
   },
 
   // Stories
@@ -101,9 +161,9 @@ export const supabaseService = {
   },
 
   async saveStory(userId: string, story: Story) {
-    const { error } = await supabase
-      .from('stories')
-      .upsert({
+    if (!userId) throw new Error("User ID is required to save a story.");
+    
+    const storyData = {
         id: story.id,
         owner_id: userId,
         title: story.title,
@@ -119,9 +179,18 @@ export const supabaseService = {
         collection: story.collection,
         is_public: story.isPublic || false,
         published_at: story.publishedAt ? new Date(story.publishedAt).toISOString() : null
-      });
+    };
 
-    if (error) throw error;
+    console.log("Saving story to Supabase:", storyData.id);
+
+    const { error } = await supabase
+      .from('stories')
+      .upsert(storyData);
+
+    if (error) {
+        console.error("Supabase Save Error:", error);
+        throw error;
+    }
   },
 
   async deleteStory(userId: string, storyId: string) {
@@ -305,6 +374,56 @@ export const supabaseService = {
     if (error) throw error;
 
     return data.map((item: any) => this._mapStory(item.stories));
+  },
+
+  // Image Management
+  async uploadImage(userId: string, base64Data: string, fileName: string): Promise<string> {
+    if (!base64Data) throw new Error("No image data provided for upload.");
+
+    let blob: Blob;
+
+    if (base64Data.startsWith('http')) {
+        try {
+            const response = await fetch(base64Data);
+            if (!response.ok) throw new Error(`Failed to fetch image from URL: ${response.status}`);
+            blob = await response.blob();
+        } catch (e) {
+            // Fallback for CORS: if it's a URL we can't fetch, just return it
+            console.warn("CORS fetch failed for upload, returning original URL", e);
+            return base64Data;
+        }
+    } else {
+        const base64Content = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+        const cleaned = base64Content.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+        
+        try {
+            const byteCharacters = atob(cleaned);
+            const byteNumbers = new Uint8Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            blob = new Blob([byteNumbers], { type: 'image/png' });
+        } catch (e) {
+            console.error("atob failure. Data length:", cleaned.length, "Preview:", cleaned.slice(0, 50));
+            throw e;
+        }
+    }
+
+    const filePath = `${userId}/${Date.now()}_${fileName}`;
+    const { data, error } = await supabase.storage
+      .from('story-assets')
+      .upload(filePath, blob, {
+        contentType: 'image/png',
+        upsert: true
+      });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('story-assets')
+      .getPublicUrl(filePath);
+
+    return publicUrl;
   },
 
   // Migration Utility

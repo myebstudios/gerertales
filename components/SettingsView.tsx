@@ -11,6 +11,7 @@ interface SettingsViewProps {
   onCancel: () => void;
   userProfile?: UserProfile;
   onUpdateCredits?: (amount: number) => void;
+  onUpdateTier?: (tier: string) => void;
   user: User | null;
 }
 
@@ -28,7 +29,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'nordic-dark'
 };
 
-const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfile, onUpdateCredits, user }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfile, onUpdateCredits, onUpdateTier, user }) => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const { notify } = useNotify();
   const [showKey, setShowKey] = useState(false);
@@ -61,14 +62,9 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
   };
 
   const handleTopUp = async (amount: number) => {
-      notify(`Initiating top-up for ${amount} credits... (Redirecting to Stripe)`);
-      try {
-          const { data, error } = await supabase.functions.invoke('create-credit-topup', {
-              body: { amount, userId: user?.id }
-          });
-          if (data?.url) window.location.href = data.url;
-      } catch (e) {
-          console.error(e);
+      notify(`Testing: Adding ${amount} credits...`, 'success');
+      if (onUpdateCredits && userProfile) {
+          onUpdateCredits(userProfile.credits + amount);
       }
   };
 
@@ -181,6 +177,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
                         ))}
                     </div>
                 </section>
+
+                {/* AI Configuration */}
             </div>
         </div>
 
@@ -190,6 +188,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ onSave, onCancel, userProfi
                 userProfile={userProfile!} 
                 userId={user?.id || ''} 
                 userEmail={user?.email || ''} 
+                onUpdateTier={onUpdateTier}
             />
         </section>
 

@@ -61,14 +61,19 @@ export interface Message {
 }
 
 export interface UserProfile {
+  id?: string;
   name: string;
   bio: string;
   avatarColor: string;
+  avatarUrl?: string;
   joinedDate: number;
   credits: number;
   stripeCustomerId?: string;
   subscriptionStatus?: 'active' | 'inactive' | 'past_due' | 'canceled';
   subscriptionTier?: 'free' | 'pro' | 'studio';
+  isAdmin?: boolean;
+  isSuperAdmin?: boolean;
+  role?: string;
 }
 
 export const AI_COSTS = {

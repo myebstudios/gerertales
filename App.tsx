@@ -21,6 +21,7 @@ import SettingsView from './components/SettingsView';
 import Auth from './components/Auth';
 import LandingPage from './components/LandingPage';
 import AdminView from './components/AdminView';
+import Dialog from './components/Dialog';
 import { NotificationProvider } from './services/NotificationContext';
 
 const App: React.FC = () => {
@@ -29,6 +30,21 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
+  // Dialog State
+  const [dialog, setDialog] = useState<{
+      isOpen: boolean;
+      title: string;
+      message: string;
+      onConfirm: () => void;
+      type: 'info' | 'danger';
+  }>({
+      isOpen: false,
+      title: '',
+      message: '',
+      onConfirm: () => {},
+      type: 'info'
+  });
+
   // Load initial state
   const [stories, setStories] = useState<Story[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -66,16 +82,44 @@ const App: React.FC = () => {
     const syncData = async () => {
         if (user) {
             // Fetch from Supabase
-            const profile = await supabaseService.getProfile(user.id);
+            let profile = await supabaseService.getProfile(user.id);
+            
             if (profile) {
+                // Check if we need to sync Google Metadata (proactive sync)
+                const metadata = user.user_metadata;
+                if (metadata && (!profile.avatarUrl || profile.name === 'Guest Writer')) {
+                    const updates: Partial<UserProfile> = {};
+                    if (metadata.full_name && profile.name === 'Guest Writer') updates.name = metadata.full_name;
+                    if (metadata.avatar_url && !profile.avatarUrl) updates.avatarUrl = metadata.avatar_url;
+                    
+                    if (Object.keys(updates).length > 0) {
+                        await supabaseService.updateProfile(user.id, updates);
+                        profile = { ...profile, ...updates };
+                    }
+                }
+
                 setUserProfile(profile);
                 if (['/', '/auth'].includes(location.pathname)) {
                     navigate('/library');
                 }
+                
+                // Log Login
+                supabaseService.logAudit(user.id, 'auth', 'User logged in');
             } else {
                 // Initialize profile in Supabase if new user
-                await supabaseService.updateProfile(user.id, userProfile);
+                const metadata = user.user_metadata;
+                const initialProfile: UserProfile = {
+                    ...userProfile,
+                    name: metadata?.full_name || userProfile.name,
+                    avatarUrl: metadata?.avatar_url,
+                    joinedDate: Date.now()
+                };
+                await supabaseService.updateProfile(user.id, initialProfile);
+                setUserProfile(initialProfile);
                 navigate('/library');
+                
+                // Log Signup
+                supabaseService.logAudit(user.id, 'auth', 'New user registered');
             }
 
             const cloudStories = await supabaseService.getStories(user.id);
@@ -172,10 +216,19 @@ const App: React.FC = () => {
   const handleDeleteStory = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to delete this story?")) {
-      setStories(prev => prev.filter(s => s.id !== id));
-      if (user) supabaseService.deleteStory(user.id, id);
-    }
+    
+    setDialog({
+        isOpen: true,
+        title: "Delete Tale",
+        message: "Are you sure you want to discard this story forever? This action cannot be undone.",
+        type: 'danger',
+        onConfirm: () => {
+            setStories(prev => prev.filter(s => s.id !== id));
+            if (user) supabaseService.deleteStory(user.id, id);
+            setDialog(d => ({ ...d, isOpen: false }));
+            notify("Tale discarded.");
+        }
+    });
   };
 
   // -- AI Logic --
@@ -185,6 +238,7 @@ const App: React.FC = () => {
       const newStoryId = crypto.randomUUID();
       const newStory: Story = {
         id: newStoryId,
+        ownerId: user?.id,
         title: config.title,
         spark: config.spark,
         tone: config.tone,
@@ -212,7 +266,21 @@ const App: React.FC = () => {
       (async () => {
           const { url, cost } = await GeminiService.generateCoverImage(config.title, config.tone, config.spark, userTier);
           if (url) {
-              setStories(prev => prev.map(s => s.id === newStoryId ? { ...s, coverImage: url } : s));
+              let finalUrl = url;
+              if (user) {
+                  try {
+                      finalUrl = await supabaseService.uploadImage(user.id, url, 'cover.png');
+                  } catch (e) { 
+                      console.error("Cloud upload failed, using local base64", e); 
+                  }
+              }
+              
+              setStories(prev => {
+                  const updated = prev.map(s => s.id === newStoryId ? { ...s, coverImage: finalUrl } : s);
+                  const storyToSave = updated.find(s => s.id === newStoryId);
+                  if (user && storyToSave) supabaseService.saveStory(user.id, storyToSave);
+                  return updated;
+              });
               deductCredits(cost, "Cover Image");
           }
       })();
@@ -237,7 +305,8 @@ const App: React.FC = () => {
       }
 
       const currentChapter = currentStory.toc[currentStory.activeChapterIndex];
-      const isProse = text.toLowerCase().includes('write') || currentChapter.content.length < 50;
+      const currentContent = currentChapter.content || '';
+      const isProse = text.toLowerCase().includes('write') || currentContent.length < 50;
 
       if (isProse) {
         const { text: prose, cost } = await GeminiService.generateProse(
@@ -248,7 +317,7 @@ const App: React.FC = () => {
             userTier
         );
         deductCredits(cost, "Prose Generation");
-        handleContentUpdate(currentChapter.content ? `${currentChapter.content}\n\n${prose}` : prose);
+        handleContentUpdate(currentContent ? `${currentContent}\n\n${prose}` : prose);
         setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'model', text: "I've added that to the draft. How does it feel?" }]);
       } else {
         const { text: response, cost } = await GeminiService.generateProse(
@@ -408,7 +477,7 @@ const App: React.FC = () => {
                                 if (user) supabaseService.saveStory(user.id, updatedStory);
                             }}
                             checkCredits={hasCredits}
-                            onDeductCredits={deductCredits}
+                            deductCredits={deductCredits}
                             focusMode={focusMode}
                             onToggleFocus={() => setFocusMode(!focusMode)}
                             isOwner={user?.id === currentStory.ownerId}
@@ -446,15 +515,31 @@ const App: React.FC = () => {
                     setUserProfile(updated);
                     if (user) supabaseService.updateProfile(user.id, updated);
                 }}
+                onUpdateTier={(tier) => {
+                    const updated = { ...userProfile, subscriptionTier: tier as any };
+                    setUserProfile(updated);
+                    if (user) supabaseService.updateProfile(user.id, updated);
+                }}
                 user={user}
             />
           } />
 
-          <Route path="/admin" element={<AdminView />} />
+          <Route path="/admin" element={userProfile.isAdmin ? <AdminView /> : <Navigate to="/library" />} />
 
           <Route path="*" element={<Navigate to={user ? "/library" : "/auth"} />} />
         </Routes>
       </div>
+
+      {/* Global Dialog Component */}
+      <Dialog 
+          isOpen={dialog.isOpen}
+          title={dialog.title}
+          message={dialog.message}
+          onConfirm={dialog.onConfirm}
+          onCancel={() => setDialog(d => ({ ...d, isOpen: false }))}
+          type={dialog.type}
+          confirmLabel={dialog.type === 'danger' ? "Delete" : "Confirm"}
+      />
     </div>
   );
 };

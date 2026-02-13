@@ -1,20 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import io from 'socket.io-client';
-import { AppSettings } from '../types';
+import { AppSettings, UserProfile } from '../types';
 import { useNotify } from '../services/NotificationContext';
+import { supabaseService } from '../services/supabaseService';
 
 const ENGINE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://terrorists-eco-filing-repair.trycloudflare.com';
 
-interface Stats {
-    requests: number;
-    tokens: number;
-    errors: number;
-}
-
-interface ActivityLog {
-    type: 'request' | 'error' | 'token' | 'complete';
-    message: string;
-    timestamp: Date;
+interface GlobalStats {
+    totalUsers: number;
+    totalStories: number;
+    activeToday: number;
+    creditsIssued: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -32,9 +27,10 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const AdminView: React.FC = () => {
-    const [stats, setStats] = useState<Stats>({ requests: 0, tokens: 0, errors: 0 });
-    const [logs, setLogs] = useState<ActivityLog[]>([]);
-    const [isConnected, setIsConnected] = useState(false);
+    const [profiles, setProfiles] = useState<UserProfile[]>([]);
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    const [stats, setStats] = useState<GlobalStats>({ totalUsers: 0, totalStories: 0, activeToday: 0, creditsIssued: 0 });
+    const [view, setView] = useState<'users' | 'logs' | 'config'>('users');
     const { notify } = useNotify();
     
     // Global AI Settings
@@ -42,70 +38,190 @@ const AdminView: React.FC = () => {
     const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
-        // Load settings
-        const saved = localStorage.getItem('gerertales_settings');
-        if (saved) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
-
-        const socket = io(ENGINE_URL);
-        socket.on('connect', () => setIsConnected(true));
-        socket.on('disconnect', () => setIsConnected(false));
-        socket.on('stats:init', (data: Stats) => setStats(data));
-        socket.on('stats:update', (data: Stats) => setStats(data));
-        socket.on('activity', (data: any) => {
-            const newLog: ActivityLog = {
-                type: data.type,
-                message: data.type === 'request' ? `Prompt: ${data.prompt}...` : (data.text || data.message || "Operation Complete"),
-                timestamp: new Date()
-            };
-            setLogs(prev => [newLog, ...prev].slice(0, 50));
-        });
-
-        return () => { socket.disconnect(); };
+        loadData();
     }, []);
+
+    const loadData = async () => {
+        try {
+            const allProfiles = await supabaseService.getAllProfiles();
+            const logs = await supabaseService.getAuditLogs();
+            setProfiles(allProfiles);
+            setAuditLogs(logs);
+
+            // Basic Stats
+            setStats({
+                totalUsers: allProfiles.length,
+                totalStories: 0, // Need service method for this
+                activeToday: allProfiles.filter(p => new Date(p.joinedDate).toDateString() === new Date().toDateString()).length,
+                creditsIssued: allProfiles.reduce((acc, p) => acc + (p.credits || 0), 0)
+            });
+
+            // Load settings
+            const saved = localStorage.getItem('gerertales_settings');
+            if (saved) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
+        } catch (e) {
+            notify("Failed to load admin data.");
+        }
+    };
 
     const handleSaveSettings = () => {
         localStorage.setItem('gerertales_settings', JSON.stringify(settings));
         notify("Global Engine Settings Updated.", "success");
+        supabaseService.logAudit(undefined, 'admin_action', 'Updated global engine settings');
     };
 
     const toggleKey = (key: string) => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
 
+    const handlePromote = async (user: UserProfile) => {
+        if (!user.id) return;
+        const newIsAdmin = !user.isAdmin;
+        try {
+            await supabaseService.updateProfile(user.id, { isAdmin: newIsAdmin });
+            notify(`${user.name} ${newIsAdmin ? 'promoted to' : 'removed from'} Admin.`);
+            supabaseService.logAudit(undefined, 'admin_action', `Changed admin status for ${user.name} to ${newIsAdmin}`);
+            loadData();
+        } catch (e) {
+            notify("Promotion failed.");
+        }
+    };
+
+    const handleUpdateCredits = async (user: UserProfile, amount: number) => {
+        if (!user.id) return;
+        try {
+            await supabaseService.updateProfile(user.id, { credits: amount });
+            notify(`Updated credits for ${user.name}.`);
+            supabaseService.logAudit(undefined, 'admin_action', `Updated credits for ${user.name} to ${amount}`);
+            loadData();
+        } catch (e) {
+            notify("Update failed.");
+        }
+    };
+
     return (
         <div className="flex-1 p-8 overflow-y-auto bg-dark-bg text-text-main font-sans no-scrollbar">
-            <div className="max-w-6xl mx-auto space-y-12 pb-20">
+            <div className="max-w-7xl mx-auto space-y-12 pb-20">
                 
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-3xl font-serif font-bold text-text-main mb-2">Studio Control Room</h1>
-                        <p className="text-text-muted">Global AI Engine & Infrastructure Management</p>
+                        <p className="text-text-muted">Platform Governance & Neural Infrastructure</p>
                     </div>
-                    <div className="flex items-center gap-3 bg-dark-card border border-dark-border px-4 py-2 rounded-full">
-                        <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-rose-500'}`}></div>
-                        <span className="text-sm font-medium">{isConnected ? 'Engine Roaring' : 'Engine Offline'}</span>
+                    <div className="flex gap-2 bg-dark-card border border-dark-border p-1 rounded-xl">
+                        {(['users', 'logs', 'config'] as const).map(v => (
+                            <button 
+                                key={v}
+                                onClick={() => setView(v)}
+                                className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === v ? 'bg-cobalt text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+                            >
+                                {v}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
                 {/* Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-dark-card border border-dark-border p-6 rounded-2xl">
-                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2 font-sans">Total Requests</div>
-                        <div className="text-4xl font-serif font-bold text-accent-primary">{stats.requests}</div>
-                    </div>
-                    <div className="bg-dark-card border border-dark-border p-6 rounded-2xl">
-                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2 font-sans">Token Flow</div>
-                        <div className="text-4xl font-serif font-bold text-purple-400">{stats.tokens.toLocaleString()}</div>
-                    </div>
-                    <div className="bg-dark-card border border-dark-border p-6 rounded-2xl">
-                        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2 font-sans">Engine Faults</div>
-                        <div className="text-4xl font-serif font-bold text-rose-400">{stats.errors}</div>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <StatBox label="Total Citizens" value={stats.totalUsers} color="text-accent-primary" />
+                    <StatBox label="Active Today" value={stats.activeToday} color="text-emerald-400" />
+                    <StatBox label="Credits Flowing" value={stats.creditsIssued.toLocaleString()} color="text-purple-400" />
+                    <StatBox label="Server Load" value="Optimal" color="text-cobalt" />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    
-                    {/* Engine Configuration */}
-                    <div className="space-y-6">
+                {view === 'users' && (
+                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-dark-bg/50 border-b border-dark-border">
+                                <tr>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">User</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Joined</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Tier</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Credits</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Status</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-dark-border">
+                                {profiles.map((p, i) => (
+                                    <tr key={i} className="hover:bg-white/5 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: p.avatarColor }}>
+                                                    {p.name.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold">{p.name}</div>
+                                                    <div className="text-[10px] text-zinc-500">{p.role || 'Writer'}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-zinc-400">{new Date(p.joinedDate).toLocaleDateString()}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${p.subscriptionTier === 'pro' ? 'bg-amber-500/10 text-amber-500' : 'bg-zinc-800 text-zinc-500'}`}>
+                                                {p.subscriptionTier}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 font-mono">{p.credits}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {p.isSuperAdmin && <span className="text-purple-400 text-[10px] font-black uppercase tracking-widest border border-purple-400/30 px-2 py-1 rounded">Super</span>}
+                                                {p.isAdmin && <span className="text-emerald-400 text-[10px] font-black uppercase tracking-widest border border-emerald-400/30 px-2 py-1 rounded">Admin</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex justify-end gap-3">
+                                                <button 
+                                                    onClick={() => {
+                                                        const amt = prompt(`Enter new credit balance for ${p.name}:`, p.credits.toString());
+                                                        if (amt !== null) handleUpdateCredits(p, parseFloat(amt));
+                                                    }}
+                                                    className="text-cobalt hover:text-white text-[10px] font-black uppercase tracking-widest"
+                                                >
+                                                    Credits
+                                                </button>
+                                                {!p.isSuperAdmin && (
+                                                    <button 
+                                                        onClick={() => handlePromote(p)} 
+                                                        className="text-zinc-500 hover:text-white text-[10px] font-black uppercase tracking-widest"
+                                                    >
+                                                        {p.isAdmin ? 'Demote' : 'Promote'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {view === 'logs' && (
+                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden flex flex-col h-[600px]">
+                        <div className="px-8 py-5 border-b border-dark-border bg-dark-bg/50 flex justify-between items-center">
+                            <h2 className="font-serif font-bold text-lg">System Pulse Log</h2>
+                            <button onClick={loadData} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-cobalt font-sans transition-colors">Refresh</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4 font-mono text-[11px] no-scrollbar">
+                            {auditLogs.map((log, i) => (
+                                <div key={i} className="flex gap-4 py-3 border-b border-dark-border last:border-0 group">
+                                    <span className="text-zinc-600 shrink-0">{new Date(log.created_at).toLocaleTimeString()}</span>
+                                    <span className={`font-black shrink-0 ${
+                                        log.type === 'auth' ? 'text-accent-primary' : 
+                                        log.type === 'admin_action' ? 'text-rose-400' : 
+                                        log.type === 'billing' ? 'text-emerald-400' : 'text-purple-400'
+                                    }`}>
+                                        {log.type.toUpperCase()}
+                                    </span>
+                                    <span className="text-zinc-300 break-all leading-relaxed">{log.message}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {view === 'config' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         <section className="bg-dark-card border border-dark-border rounded-3xl p-8 space-y-8">
                             <div className="flex items-center justify-between">
                                 <h2 className="text-xl font-serif font-bold">Neural Engine Config</h2>
@@ -113,60 +229,31 @@ const AdminView: React.FC = () => {
                             </div>
 
                             <div className="space-y-6">
-                                {/* Text Model Selection */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-sans">Active Text Model</label>
-                                    <select 
-                                        value={settings.textModel}
-                                        onChange={(e) => setSettings({...settings, textModel: e.target.value})}
-                                        className="w-full bg-dark-bg border border-dark-border rounded-xl p-3 text-sm text-white focus:border-cobalt outline-none font-sans"
-                                    >
-                                        <option value="local-gemma">GérerLlama (Local Gemma 3)</option>
-                                        <optgroup label="x.ai (Grok)">
-                                            <option value="grok-4-1-fast-reasoning">Grok 4.1 Fast Reasoning</option>
-                                            <option value="grok-4-1-fast-non-reasoning">Grok 4.1 Fast</option>
-                                            <option value="grok-3">Grok 3</option>
-                                            <option value="grok-3-mini">Grok 3 Mini</option>
-                                            <option value="grok-2-vision-1212">Grok 2 Vision</option>
-                                        </optgroup>
-                                        <optgroup label="Google DeepMind">
-                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                                            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                                        </optgroup>
-                                        <optgroup label="OpenAI">
-                                            <option value="gpt-4o">GPT-4o</option>
-                                            <option value="gpt-4o-mini">GPT-4o Mini</option>
-                                        </optgroup>
-                                    </select>
-                                </div>
-
-                                {/* Image Model Selection */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-sans">Illustration Engine</label>
-                                    <select 
-                                        value={settings.imageModel}
-                                        onChange={(e) => setSettings({...settings, imageModel: e.target.value})}
-                                        className="w-full bg-dark-bg border border-dark-border rounded-xl p-3 text-sm text-white focus:border-cobalt outline-none font-sans"
-                                    >
-                                        <optgroup label="Google Imagen">
-                                            <option value="imagen-3">Imagen 3 (Standard)</option>
-                                            <option value="gemini-2.0-flash-exp">Gemini 2.0 (Fast)</option>
-                                        </optgroup>
-                                        <optgroup label="x.ai (Grok Imagine)">
-                                            <option value="grok-imagine-image-pro">Grok Imagine Pro</option>
-                                            <option value="grok-imagine-image">Grok Imagine</option>
-                                            <option value="grok-2-image-1212">Grok 2 Image</option>
-                                        </optgroup>
-                                        <optgroup label="OpenAI DALL-E">
-                                            <option value="dall-e-3">DALL-E 3</option>
-                                        </optgroup>
-                                    </select>
-                                </div>
+                                {/* Model Selections - Preserving current logic but styled */}
+                                <ConfigSelect 
+                                    label="Active Text Model" 
+                                    value={settings.textModel} 
+                                    onChange={(v) => setSettings({...settings, textModel: v})}
+                                    options={[
+                                        { label: 'GérerLlama (Local)', value: 'local-gemma' },
+                                        { label: 'Grok 3', value: 'grok-3' },
+                                        { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
+                                        { label: 'GPT-4o', value: 'gpt-4o' }
+                                    ]}
+                                />
+                                <ConfigSelect 
+                                    label="Illustration Engine" 
+                                    value={settings.imageModel} 
+                                    onChange={(v) => setSettings({...settings, imageModel: v})}
+                                    options={[
+                                        { label: 'Imagen 3', value: 'imagen-3' },
+                                        { label: 'Grok Imagine Pro', value: 'grok-imagine-image-pro' },
+                                        { label: 'DALL-E 3', value: 'dall-e-3' }
+                                    ]}
+                                />
 
                                 <div className="space-y-4 pt-4 border-t border-dark-border">
                                     <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-600 font-sans">Infrastructure Keys</h3>
-                                    
                                     {[
                                         { label: 'Gemini API', key: 'apiKey' },
                                         { label: 'OpenAI API', key: 'openAiApiKey' },
@@ -191,37 +278,30 @@ const AdminView: React.FC = () => {
                             </div>
                         </section>
                     </div>
-
-                    {/* Live Pulse */}
-                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden flex flex-col h-[700px]">
-                        <div className="px-8 py-5 border-b border-dark-border bg-dark-bg/50 flex justify-between items-center">
-                            <h2 className="font-serif font-bold text-lg">Engine Pulse Log</h2>
-                            <button onClick={() => setLogs([])} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-rose-400 font-sans transition-colors">Clear Log</button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 font-mono text-[11px] no-scrollbar">
-                            {logs.length === 0 ? (
-                                <div className="text-text-muted italic text-center py-20 font-serif">Waiting for pulse...</div>
-                            ) : (
-                                logs.map((log, i) => (
-                                    <div key={i} className="flex gap-4 py-3 border-b border-dark-border last:border-0 group">
-                                        <span className="text-zinc-600 shrink-0">{log.timestamp.toLocaleTimeString()}</span>
-                                        <span className={`font-black shrink-0 ${
-                                            log.type === 'request' ? 'text-accent-primary' : 
-                                            log.type === 'error' ? 'text-rose-400' : 
-                                            log.type === 'complete' ? 'text-emerald-400' : 'text-purple-400'
-                                        }`}>
-                                            {log.type.toUpperCase()}
-                                        </span>
-                                        <span className="text-zinc-300 break-all leading-relaxed">{log.message}</span>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );
 };
+
+const StatBox = ({ label, value, color }: { label: string, value: string | number, color: string }) => (
+    <div className="bg-dark-card border border-dark-border p-6 rounded-2xl">
+        <div className="text-text-muted text-[10px] font-black uppercase tracking-wider mb-2 font-sans">{label}</div>
+        <div className={`text-4xl font-serif font-bold ${color}`}>{value}</div>
+    </div>
+);
+
+const ConfigSelect = ({ label, value, onChange, options }: { label: string, value: string, onChange: (v: string) => void, options: {label: string, value: string}[] }) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-sans">{label}</label>
+        <select 
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full bg-dark-bg border border-dark-border rounded-xl p-3 text-sm text-white focus:border-cobalt outline-none font-sans"
+        >
+            {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        </select>
+    </div>
+);
 
 export default AdminView;

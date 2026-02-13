@@ -12,7 +12,7 @@ interface StoryBlueprintProps {
   onChapterSelect: (index: number) => void;
   onContentUpdate: (content: string) => void;
   onChapterUpdate?: (index: number, updates: Partial<Chapter>) => void;
-  onExport: () => void;
+  onExport?: () => void;
   checkCredits: () => boolean;
   deductCredits: (cost: number, feature: string) => void;
   focusMode?: boolean;
@@ -24,7 +24,8 @@ interface StoryBlueprintProps {
 }
 
 const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'];
-const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+const OPENAI_VOICES = ['Alloy', 'Echo', 'Fable', 'Onyx', 'Nova', 'Shimmer'];
+const ELEVENLABS_VOICES = ['Rachel', 'Antoni', 'Elli', 'Josh', 'Arnold', 'Adam'];
 
 const StoryBlueprint: React.FC<StoryBlueprintProps> = ({ 
   story, 
@@ -120,7 +121,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
 
   // -- Settings State --
   const [ttsProvider, setTtsProvider] = useState<TTSProvider>('ai');
-  const [selectedVoice, setSelectedVoice] = useState<string>('Kore');
+  const [selectedVoice, setSelectedVoice] = useState<string>('Rachel');
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   // -- Refs --
@@ -151,8 +152,10 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
             const parsed = JSON.parse(savedSettings);
             setTtsProvider(parsed.ttsProvider || 'ai');
             if (parsed.ttsProvider === 'browser') {
+            } else if (parsed.ttsModel && parsed.ttsModel.includes('eleven')) {
+                setSelectedVoice('Rachel');
             } else if (parsed.ttsModel && parsed.ttsModel.startsWith('tts')) {
-                setSelectedVoice('alloy');
+                setSelectedVoice('Alloy');
             } else {
                 setSelectedVoice('Kore');
             }
@@ -190,8 +193,17 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                              story.tone
                          );
                          if (url) {
-                             deductCredits(cost, "Scene Banner");
-                             onChapterUpdate(currentChapterIndex, { bannerImage: url });
+                             let finalUrl = url;
+                             if (userId) {
+                                 try {
+                                     const uploadedUrl = await supabaseService.uploadImage(userId, url, `banner_${currentChapterIndex}.png`);
+                                     if (uploadedUrl) finalUrl = uploadedUrl;
+                                 } catch (err) {
+                                     console.error("Banner upload failed", err);
+                                 }
+                             }
+                             if (deductCredits) deductCredits(cost, "Scene Banner");
+                             if (onChapterUpdate) onChapterUpdate(currentChapterIndex, { bannerImage: finalUrl });
                          }
                      } catch (e) {
                          console.warn("Banner generation failed", e);
@@ -372,6 +384,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
       const savedSettings = localStorage.getItem('gerertales_settings');
       if (savedSettings) {
           const parsed = JSON.parse(savedSettings);
+          if (parsed.ttsModel && parsed.ttsModel.includes('eleven')) return ELEVENLABS_VOICES;
           if (parsed.ttsModel && parsed.ttsModel.startsWith('tts')) return OPENAI_VOICES;
       }
       return GEMINI_VOICES;

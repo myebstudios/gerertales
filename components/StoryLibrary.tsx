@@ -57,7 +57,7 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onSelect, onBackup, onDele
             {/* Chapter Badge */}
             <div className="absolute top-5 right-5 flex flex-col items-end gap-2">
                 <div className="bg-white/10 backdrop-blur-xl text-white text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-white/20 uppercase tracking-[0.15em]">
-                    {story.toc?.filter(c => c.content.length > 0).length || 0}/{story.toc?.length || 0} CH
+                    {story.toc?.filter(c => (c.content || '').length > 0).length || 0}/{story.toc?.length || 0} CH
                 </div>
                 {story.ownerId === currentUserId && (
                     <div className={`text-[8px] font-black px-2 py-1 rounded-md border uppercase tracking-widest backdrop-blur-md
@@ -317,6 +317,7 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
                                     onSelect={onSelectStory} 
                                     onBackup={onBackupStory} 
                                     onDelete={onDeleteStory} 
+                                    currentUserId={currentUserId}
                                 />
                             ))}
                         </div>
@@ -332,6 +333,7 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
                                 onSelect={onSelectStory} 
                                 onBackup={onBackupStory} 
                                 onDelete={onDeleteStory} 
+                                currentUserId={currentUserId}
                             />
                         ))}
                     </div>

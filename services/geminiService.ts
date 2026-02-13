@@ -19,6 +19,7 @@ const RATE_ELEVENLABS_CHAR = 0.05;
 // Helper to check model type
 const isGeminiModel = (model: string) => model.toLowerCase().includes('gemini') || model.toLowerCase().includes('imagen');
 const isXAIModel = (model: string) => model.toLowerCase().includes('grok');
+const isDalleModel = (model: string) => model.toLowerCase().includes('dall-e');
 
 // -- Local Engine (GérerLlama) Bridge --
 const callLocalLlama = async (prompt: string): Promise<{ content: string, cost: number }> => {
@@ -57,7 +58,7 @@ const getConfig = (tier: string = 'free') => {
     imageModel: DEFAULT_IMAGE_MODEL,
     imageResolution: '1K',
     ttsModel: DEFAULT_TTS_MODEL,
-    elevenLabsVoiceId: 'cgSgSjJ47ptB6SHCPjD2'
+    elevenLabsVoiceId: VOICE_LISTS.elevenlabs[0].id
   };
   try {
     const saved = localStorage.getItem('gerertales_settings');
@@ -95,6 +96,7 @@ const getConfig = (tier: string = 'free') => {
     gemini,
     openai,
     xai,
+    xAIApiKey,
     elevenLabsApiKey: settings.elevenLabsApiKey || import.meta.env.VITE_ELEVENLABS_API_KEY,
     elevenLabsVoiceId: settings.elevenLabsVoiceId,
     textModel: settings.textModel || (tier === 'free' ? FREE_TEXT_MODEL : PREMIUM_TEXT_MODEL),
@@ -110,6 +112,35 @@ const calculateCost = (inputTokens: number, outputTokens: number): number => {
     return Math.max(0.1, Math.round(cost * 100) / 100);
 };
 
+export const VOICE_LISTS: Record<string, any> = {
+    'gemini': [
+        { name: 'Kore', id: 'Kore' },
+        { name: 'Puck', id: 'Puck' },
+        { name: 'Charon', id: 'Charon' },
+        { name: 'Fenrir', id: 'Fenrir' },
+        { name: 'Zephyr', id: 'Zephyr' }
+    ],
+    'openai': [
+        { name: 'Alloy', id: 'alloy' },
+        { name: 'Echo', id: 'echo' },
+        { name: 'Fable', id: 'fable' },
+        { name: 'Onyx', id: 'onyx' },
+        { name: 'Nova', id: 'nova' },
+        { name: 'Shimmer', id: 'shimmer' }
+    ],
+    'elevenlabs': [
+        { name: 'Rachel', id: '21m00Tcm4TlvDq8ikWAM' },
+        { name: 'Antoni', id: 'ErXw79k9X55p24L2tq0O' },
+        { name: 'Elli', id: 'MF3mGyEYCl7XYWbV9V6O' },
+        { name: 'Josh', id: 'Tx33qxS9ppHS7LmdUv7O' },
+        { name: 'Arnold', id: 'VR6A9C78zM76B9Xp6m3U' },
+        { name: 'Adam', id: 'pNInz6S6IPD9S0G42LdD' }
+    ],
+    'xai': [
+        { name: 'Grok Beta', id: 'grok-1' }
+    ]
+};
+
 const cleanJson = (text: string): string => {
   if (!text) return "{}";
   let clean = text.trim();
@@ -122,20 +153,16 @@ const cleanJson = (text: string): string => {
 const compressImage = (base64: string): Promise<string> => {
     return new Promise((resolve) => {
         const img = new Image();
+        img.crossOrigin = "anonymous"; // Handle cross-origin URLs if needed
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            // Target 512px max dimension
             const scale = 512 / Math.max(img.width, img.height);
-            // Only scale down, never up
             const finalScale = scale < 1 ? scale : 1;
-            
             canvas.width = img.width * finalScale;
             canvas.height = img.height * finalScale;
-            
             const ctx = canvas.getContext('2d');
             if(ctx) {
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                // Use JPEG 0.8 for storage efficiency
                 resolve(canvas.toDataURL('image/jpeg', 0.8));
             } else {
                 resolve(base64);
@@ -349,13 +376,13 @@ export const generateStoryArchitecture = async (
  * Step 3: Generate a cover image for the story.
  */
 export const generateCoverImage = async (title: string, tone: string, spark: string, tier: string = 'free'): Promise<{ url: string | undefined, cost: number }> => {
-  const { gemini, openai, imageModel, imageResolution } = getConfig(tier);
+  let { gemini, openai, xai, imageModel, imageResolution } = getConfig(tier);
   const safeVisualDescription = await createSafeImagePrompt(`${spark} (Title: ${title})`, 'COVER', tone, tier);
 
   try {
     let url: string | undefined;
 
-    if (imageModel.startsWith('dall-e') && openai) {
+    if (isDalleModel(imageModel) && openai) {
         const response = await openai.images.generate({
             model: imageModel,
             prompt: safeVisualDescription,
@@ -365,14 +392,58 @@ export const generateCoverImage = async (title: string, tone: string, spark: str
         });
         const b64 = response.data[0].b64_json;
         url = b64 ? `data:image/png;base64,${b64}` : undefined;
+    } else if (isXAIModel(imageModel) && xai) {
+        // x.ai Image generation
+        try {
+            const xAIApiKey = (getConfig(tier) as any).xAIApiKey; 
+            const body = {
+                model: imageModel,
+                prompt: safeVisualDescription,
+                aspect_ratio: "3:4",
+                image_format: "base64"
+            };
+            
+            console.log("xAI Request Payload:", { ...body, prompt: "[redacted]" });
+
+            const baseUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                ? "https://api.x.ai/v1"
+                : "/x-api";
+
+            const response = await fetch(`${baseUrl}/images/generations`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${xAIApiKey}`
+                },
+                body: JSON.stringify(body)
+            });
+            
+            if (!response.ok) {
+                const errData = await response.json();
+                console.error("xAI API Error Detail:", errData);
+                throw new Error(errData.error?.message || errData.error || `xAI Error ${response.status}`);
+            }
+            
+            const data = await response.json();
+            // Handle both xAI proprietary format ("image") and OpenAI compatible ("data[0]")
+            const base64 = data.image || data.data?.[0]?.b64_json || data.data?.[0]?.url;
+            url = base64 ? (base64.startsWith('http') ? base64 : `data:image/png;base64,${base64}`) : undefined;
+        } catch (e: any) {
+            console.warn("xAI Image failed, falling back to Gemini", e);
+            imageModel = DEFAULT_IMAGE_MODEL; // Fallback
+            return await generateCoverImage(title, tone, spark, tier);
+        }
     } else {
+        // Fallback to Gemini if model is NOT XAI/Dalle OR if providers missing
+        const useModel = isGeminiModel(imageModel) ? imageModel : DEFAULT_IMAGE_MODEL;
+        
         const config: any = { imageConfig: { aspectRatio: "3:4" } };
-        if (imageModel.includes('preview') || imageModel.includes('2.0')) {
+        if (useModel.includes('preview') || useModel.includes('2.0')) {
             config.imageConfig.imageSize = imageResolution === 'Low' ? '1K' : imageResolution;
         }
 
         const response = await gemini.models.generateContent({
-            model: imageModel,
+            model: useModel,
             contents: [{ role: 'user', parts: [{ text: safeVisualDescription }] }],
             config: config
         });
@@ -390,8 +461,12 @@ export const generateCoverImage = async (title: string, tone: string, spark: str
 
     return { url, cost: RATE_IMAGE };
 
-  } catch (e) {
+  } catch (e: any) {
     console.error("Failed to generate cover", e);
+    // If we hit a model not found error, try one last time with default
+    if (e.message?.includes('not found') && imageModel !== DEFAULT_IMAGE_MODEL) {
+        return await generateCoverImage(title, tone, spark, tier);
+    }
     return { url: undefined, cost: 0 };
   }
 };
@@ -400,14 +475,14 @@ export const generateCoverImage = async (title: string, tone: string, spark: str
  * Step 4: Generate a banner image for a chapter.
  */
 export const generateChapterBanner = async (chapterTitle: string, chapterSummary: string, storyTitle: string, tone: string, tier: string = 'free'): Promise<{ url: string | undefined, cost: number }> => {
-  const { gemini, openai, imageModel, imageResolution } = getConfig(tier);
+  let { gemini, openai, xai, imageModel, imageResolution } = getConfig(tier);
   const context = `Story: ${storyTitle}\nChapter: ${chapterTitle}\nSummary: ${chapterSummary}`;
   const safeVisualDescription = await createSafeImagePrompt(context, 'SCENE', tone, tier);
 
   try {
     let url: string | undefined;
 
-    if (imageModel.startsWith('dall-e') && openai) {
+    if (isDalleModel(imageModel) && openai) {
         const response = await openai.images.generate({
             model: imageModel,
             prompt: safeVisualDescription,
@@ -417,14 +492,51 @@ export const generateChapterBanner = async (chapterTitle: string, chapterSummary
         });
         const b64 = response.data[0].b64_json;
         url = b64 ? `data:image/png;base64,${b64}` : undefined;
+    } else if (isXAIModel(imageModel) && xai) {
+        try {
+            const xAIApiKey = (getConfig(tier) as any).xAIApiKey;
+            const body = {
+                model: imageModel,
+                prompt: safeVisualDescription,
+                aspect_ratio: "16:9",
+                image_format: "base64"
+            };
+
+            const baseUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                ? "https://api.x.ai/v1"
+                : "/x-api";
+
+            const response = await fetch(`${baseUrl}/images/generations`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${xAIApiKey}`
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error?.message || errData.error || `xAI Error ${response.status}`);
+            }
+
+            const data = await response.json();
+            const base64 = data.image || data.data?.[0]?.b64_json || data.data?.[0]?.url;
+            url = base64 ? (base64.startsWith('http') ? base64 : `data:image/png;base64,${base64}`) : undefined;
+        } catch (e) {
+            imageModel = DEFAULT_IMAGE_MODEL;
+            return await generateChapterBanner(chapterTitle, chapterSummary, storyTitle, tone, tier);
+        }
     } else {
+        const useModel = isGeminiModel(imageModel) ? imageModel : DEFAULT_IMAGE_MODEL;
+
         const config: any = { imageConfig: { aspectRatio: "16:9" } };
-        if (imageModel.includes('preview') || imageModel.includes('2.0')) {
+        if (useModel.includes('preview') || useModel.includes('2.0')) {
             config.imageConfig.imageSize = imageResolution === 'Low' ? '1K' : imageResolution;
         }
 
         const response = await gemini.models.generateContent({
-            model: imageModel,
+            model: useModel,
             contents: [{ role: 'user', parts: [{ text: safeVisualDescription }] }],
             config: config
         });
@@ -442,11 +554,15 @@ export const generateChapterBanner = async (chapterTitle: string, chapterSummary
 
     return { url, cost: RATE_IMAGE };
 
-  } catch (e) {
+  } catch (e: any) {
     console.error("Failed to generate banner", e);
+    if (e.message?.includes('not found') && imageModel !== DEFAULT_IMAGE_MODEL) {
+        return await generateChapterBanner(chapterTitle, chapterSummary, storyTitle, tone, tier);
+    }
     return { url: undefined, cost: 0 };
   }
 };
+
 
 /**
  * Co-writer function: Generates prose based on chat history.
@@ -524,15 +640,17 @@ export const generateProse = async (
 /**
  * TTS: Generate speech.
  */
-export const generateSpeech = async (text: string, voiceName: string = 'Kore', tier: string = 'free'): Promise<{ audio: AudioBuffer | null, cost: number }> => {
-  const { gemini, openai, ttsModel, elevenLabsApiKey, elevenLabsVoiceId } = getConfig(tier);
+export const generateSpeech = async (text: string, voiceName: string = 'Rachel', tier: string = 'free'): Promise<{ audio: AudioBuffer | null, cost: number }> => {
+  const { gemini, openai, xai, ttsModel, elevenLabsApiKey } = getConfig(tier);
   const outputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
   
-  // Use ElevenLabs if configured
-  if (elevenLabsApiKey) {
-    console.log("Using ElevenLabs TTS...");
-    try {
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${elevenLabsVoiceId}?output_format=pcm_24000`, {
+  try {
+    // 1. ElevenLabs Provider
+    if (ttsModel.includes('eleven') && elevenLabsApiKey) {
+        console.log("Using ElevenLabs TTS...");
+        const voice = VOICE_LISTS.elevenlabs.find((v: any) => v.name === voiceName) || VOICE_LISTS.elevenlabs[0];
+        
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -545,64 +663,73 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore', t
             })
         });
 
-        if (!response.ok) throw new Error(`ElevenLabs error: ${response.statusText}`);
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(`ElevenLabs error: ${err.detail?.message || response.statusText}`);
+        }
         
         const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await decodeAudioData(new Uint8Array(arrayBuffer), outputAudioContext, 24000, 1);
+        const audioBuffer = await outputAudioContext.decodeAudioData(arrayBuffer);
         const cost = Math.round((text.length * RATE_ELEVENLABS_CHAR) * 100) / 100;
         return { audio: audioBuffer, cost };
-    } catch (e) {
-        console.error("ElevenLabs failed, falling back...", e);
     }
-  }
 
-  const textChunks = chunkText(text, 3500); 
-  const audioBuffers: AudioBuffer[] = [];
-  const estimatedCost = Math.round((text.length * RATE_TTS_CHAR) * 100) / 100;
+    // 2. OpenAI Provider (includes xAI fallback if compatible)
+    if (ttsModel.startsWith('tts-') && openai) {
+        console.log("Using OpenAI TTS...");
+        const voice = VOICE_LISTS.openai.find((v: any) => v.name === voiceName) || VOICE_LISTS.openai[0];
+        
+        const response = await openai.audio.speech.create({
+            model: ttsModel,
+            voice: voice.id as any,
+            input: text,
+        });
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await outputAudioContext.decodeAudioData(arrayBuffer);
+        const cost = Math.round((text.length * RATE_TTS_CHAR) * 100) / 100;
+        return { audio: audioBuffer, cost };
+    }
 
-  try {
-    for (const chunk of textChunks) {
-        let chunkBuffer: AudioBuffer | null = null;
-
-        if (!isGeminiModel(ttsModel) && openai) {
-            const openAIVoiceMap: Record<string, string> = { 'Kore': 'alloy', 'Puck': 'echo', 'Charon': 'fable', 'Fenrir': 'onyx', 'Zephyr': 'nova' };
-            const response = await openai.audio.speech.create({
-                model: ttsModel,
-                voice: (openAIVoiceMap[voiceName] || 'alloy') as any,
-                input: chunk,
-            });
-            const arrayBuffer = await response.arrayBuffer();
-            chunkBuffer = await outputAudioContext.decodeAudioData(arrayBuffer);
-
-        } else {
+    // 3. Google Gemini Provider
+    if (ttsModel.includes('gemini') || !ttsModel) {
+        console.log("Using Gemini TTS...");
+        const voice = VOICE_LISTS.gemini.find((v: any) => v.name === voiceName) || VOICE_LISTS.gemini[0];
+        const textChunks = chunkText(text, 3500); 
+        const audioBuffers: AudioBuffer[] = [];
+        
+        for (const chunk of textChunks) {
             const response = await gemini.models.generateContent({
-                model: ttsModel,
+                model: 'gemini-1.5-flash', // Use stable model for audio modality
                 contents: [{ parts: [{ text: chunk }] }],
                 config: {
                     responseModalities: [Modality.AUDIO],
-                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName } } },
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice.id } } },
                 },
             });
             const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
-                chunkBuffer = await decodeAudioData(decode(base64Audio), outputAudioContext, 24000, 1);
+                const chunkBuffer = await decodeAudioData(decode(base64Audio), outputAudioContext, 24000, 1);
+                audioBuffers.push(chunkBuffer);
             }
         }
-        if (chunkBuffer) audioBuffers.push(chunkBuffer);
+        
+        if (audioBuffers.length === 0) throw new Error("No audio generated by Gemini");
+        const cost = Math.round((text.length * RATE_TTS_CHAR) * 100) / 100;
+        return { 
+            audio: audioBuffers.length === 1 ? audioBuffers[0] : mergeAudioBuffers(audioBuffers, outputAudioContext), 
+            cost 
+        };
     }
 
-    if (audioBuffers.length === 0) return { audio: null, cost: 0 };
-    
-    return { 
-        audio: audioBuffers.length === 1 ? audioBuffers[0] : mergeAudioBuffers(audioBuffers, outputAudioContext), 
-        cost: estimatedCost 
-    };
+    throw new Error(`Unsupported TTS model: ${ttsModel}`);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("TTS Generation Error:", error);
+    // Return null to trigger fallback in component
     return { audio: null, cost: 0 };
   }
 };
+
 
 
 // -- Helper functions for Audio --
@@ -645,4 +772,3 @@ function mergeAudioBuffers(buffers: AudioBuffer[], ctx: AudioContext): AudioBuff
     }
     return result;
 }
-

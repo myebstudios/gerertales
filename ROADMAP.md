@@ -5,6 +5,8 @@ This document outlines the structural plan to transform GérerTales from a proto
 ## Phase 1: Core Professionalization (Current)
 - [x] **Supabase Integration:** Centralized database and user management.
 - [x] **Cloud Storage:** Stories are saved to user profiles, not local storage.
+- [x] **Secure Admin Panel:** Locked access and full dashboard for management.
+- [x] **User Sync:** Google profile metadata (name/photo) auto-sync.
 - [x] **Stripe Checkout Flow:** 
     - [x] Secure API key management.
     - [x] User subscription status check before story generation.

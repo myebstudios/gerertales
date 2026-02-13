@@ -7,9 +7,10 @@ interface SubscriptionPlansProps {
   userProfile: UserProfile;
   userId: string;
   userEmail: string;
+  onUpdateTier?: (tier: string) => void;
 }
 
-const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ userProfile, userId, userEmail }) => {
+const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ userProfile, userId, userEmail, onUpdateTier }) => {
   const plans = [
     {
       id: 'free',
@@ -43,13 +44,18 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ userProfile, user
     }
   ];
 
-  const handleSubscribe = async (priceId: string) => {
-    if (!priceId) return;
+  const handleSubscribe = async (planId: string) => {
+    if (!planId || planId === 'free') return;
+
+    if (onUpdateTier) {
+        onUpdateTier(planId);
+        return;
+    }
 
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
         body: { 
-            priceId, 
+            priceId: plans.find(p => p.id === planId)?.priceId, 
             userId, 
             customerEmail: userEmail
         },
@@ -61,7 +67,6 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ userProfile, user
       }
     } catch (err) {
       console.error('Subscription error:', err);
-      alert('Failed to initiate checkout. Please try again.');
     }
   };
 
@@ -99,8 +104,8 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({ userProfile, user
             </ul>
 
             <button
-              onClick={() => handleSubscribe(plan.priceId)}
-              disabled={plan.isCurrent || !plan.priceId}
+              onClick={() => handleSubscribe(plan.id)}
+              disabled={plan.isCurrent || (plan.id === 'free' && !plan.priceId)}
               className={`w-full py-3 rounded-xl font-bold uppercase tracking-widest text-xs transition-all
                 ${plan.isCurrent 
                   ? 'bg-zinc-800 text-zinc-500 cursor-default' 

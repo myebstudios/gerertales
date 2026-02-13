@@ -24,6 +24,12 @@ command = "npm run build"
 [build.services]
 
 [[redirects]]
+from = "/x-api/*"
+to = "https://api.x.ai/v1/:splat"
+status = 200
+force = true
+
+[[redirects]]
 from = "/*"
 to = "/index.html"
 status = 200.0

@@ -44,12 +44,20 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ profile, stories, onU
         {/* Header Section */}
         <div className="flex items-start justify-between border-b border-dark-border pb-8">
             <div className="flex items-center gap-6">
-                <div 
-                    className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-serif text-white shadow-2xl"
-                    style={{ backgroundColor: profile.avatarColor }}
-                >
-                    {name.charAt(0).toUpperCase()}
-                </div>
+                {profile.avatarUrl ? (
+                    <img 
+                        src={profile.avatarUrl} 
+                        alt={profile.name}
+                        className="w-24 h-24 rounded-full object-cover shadow-2xl border-2 border-cobalt/20"
+                    />
+                ) : (
+                    <div 
+                        className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-serif text-white shadow-2xl"
+                        style={{ backgroundColor: profile.avatarColor }}
+                    >
+                        {name.charAt(0).toUpperCase()}
+                    </div>
+                )}
                 <div>
                     {isEditing ? (
                         <div className="space-y-3">
@@ -70,9 +78,27 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({ profile, stories, onU
                         <div>
                             <h1 className="text-4xl font-serif text-text-main mb-2">{profile.name}</h1>
                             <p className="text-zinc-400 font-sans italic">{profile.bio}</p>
-                            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mt-2">
-                                Member since {new Date(profile.joinedDate).toLocaleDateString()}
-                            </p>
+                            <div className="flex flex-wrap gap-4 mt-4">
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                                    </svg>
+                                    {user?.email}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
+                                    </svg>
+                                    Joined {new Date(profile.joinedDate).toLocaleDateString()}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3 text-cobalt">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
+                                    </svg>
+                                    {profile.credits} Credits Remaining
+                                </p>
+                            </div>
                         </div>
                     )}
                 </div>
