@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { StoryConfig, StoryFormat, Character, Chapter, Location, StoryBlueprintData } from '../types';
-import * as GeminiService from '../services/geminiService';
+import * as TextService from '../services/textService';
 import { useNotify } from '../services/NotificationContext';
 
 interface OnboardingProps {
@@ -89,7 +89,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
 
       setIsAnalyzing(true);
       try {
-        const { data: analysis, cost } = await GeminiService.analyzeStoryConcept(spark, userTier);
+        const { data: analysis, cost } = await TextService.analyzeStoryConcept(spark, userTier);
         onDeductCredits(cost, "Idea Analysis");
 
         setTitle(analysis.title);
@@ -111,7 +111,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
 
     setIsAnalyzing(true);
     try {
-        const { data: architecture, cost } = await GeminiService.generateStoryArchitecture(
+        const { data: architecture, cost } = await TextService.generateStoryArchitecture(
             spark,
             title,
             format,

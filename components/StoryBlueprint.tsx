@@ -2,7 +2,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Chapter, Story, TTSProvider, StoryComment } from '../types';
 import { jsPDF } from "jspdf";
-import * as GeminiService from '../services/geminiService';
+import * as VoiceService from '../services/voiceService';
+import { VOICE_LISTS } from '../services/voiceService';
+import * as ImageService from '../services/imageService';
 import { supabaseService } from '../services/supabaseService';
 import { useNotify } from '../services/NotificationContext';
 
@@ -21,6 +23,7 @@ interface StoryBlueprintProps {
   onTogglePublish?: () => void;
   userId?: string;
   onRefreshStory?: () => void;
+  userCredits?: number;
 }
 
 const GEMINI_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'];
@@ -40,7 +43,8 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
   isOwner = true,
   onTogglePublish,
   userId,
-  onRefreshStory
+  onRefreshStory,
+  userCredits
 }) => {
   const chapter = story.toc[currentChapterIndex];
   const { notify } = useNotify();
@@ -186,7 +190,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                      setIsBannerLoading(true);
                      
                      try {
-                         const { url, cost } = await GeminiService.generateChapterBanner(
+                         const { url, cost } = await ImageService.generateChapterBanner(
                              chapter.title,
                              chapter.summary || "A new scene.",
                              story.title,
@@ -303,7 +307,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
 
     setIsLoadingAudio(true);
     try {
-        const { audio, cost } = await GeminiService.generateSpeech(chapter.content, selectedVoice);
+        const { audio, cost } = await VoiceService.generateSpeech(chapter.content, selectedVoice);
         
         if (audio) {
             deductCredits(cost, "TTS Generation");
@@ -384,10 +388,10 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
       const savedSettings = localStorage.getItem('gerertales_settings');
       if (savedSettings) {
           const parsed = JSON.parse(savedSettings);
-          if (parsed.ttsModel && parsed.ttsModel.includes('eleven')) return ELEVENLABS_VOICES;
-          if (parsed.ttsModel && parsed.ttsModel.startsWith('tts')) return OPENAI_VOICES;
+          if (parsed.ttsModel && parsed.ttsModel.includes('eleven')) return VOICE_LISTS.elevenlabs.map((v:any) => v.name);
+          if (parsed.ttsModel && (parsed.ttsModel.startsWith('tts') || parsed.ttsModel.includes('openai'))) return VOICE_LISTS.openai.map((v:any) => v.name);
       }
-      return GEMINI_VOICES;
+      return VOICE_LISTS.gemini.map((v:any) => v.name);
   };
 
   // Export handlers
@@ -531,6 +535,14 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                     </svg>
                     <span>{readingTime}m Read</span>
                 </div>
+                {userCredits !== undefined && (
+                    <div className="flex items-center gap-1.5 text-cobalt border-l border-dark-border pl-4">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        <span>{userCredits.toFixed(1)} Cr</span>
+                    </div>
+                )}
             </div>
         </div>
 

@@ -32,6 +32,8 @@ const AdminView: React.FC = () => {
     const [stats, setStats] = useState<GlobalStats>({ totalUsers: 0, totalStories: 0, activeToday: 0, creditsIssued: 0 });
     const [view, setView] = useState<'users' | 'logs' | 'config'>('users');
     const { notify } = useNotify();
+
+    const localEngineUrl = import.meta.env.VITE_GERERLLAMA_URL || "https://terrorists-eco-filing-repair.trycloudflare.com/api/generate";
     
     // Global AI Settings
     const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -57,17 +59,27 @@ const AdminView: React.FC = () => {
             });
 
             // Load settings
-            const saved = localStorage.getItem('gerertales_settings');
-            if (saved) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
+            const globalConfig = await supabaseService.getSystemConfig();
+            if (globalConfig) {
+                setSettings({ ...DEFAULT_SETTINGS, ...globalConfig });
+            } else {
+                const saved = localStorage.getItem('gerertales_settings');
+                if (saved) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(saved) });
+            }
         } catch (e) {
             notify("Failed to load admin data.");
         }
     };
 
-    const handleSaveSettings = () => {
-        localStorage.setItem('gerertales_settings', JSON.stringify(settings));
-        notify("Global Engine Settings Updated.", "success");
-        supabaseService.logAudit(undefined, 'admin_action', 'Updated global engine settings');
+    const handleSaveSettings = async () => {
+        try {
+            await supabaseService.updateSystemConfig(settings);
+            localStorage.setItem('gerertales_settings', JSON.stringify(settings));
+            notify("Global Engine Settings Synced to Cloud.", "success");
+            supabaseService.logAudit(undefined, 'admin_action', 'Updated global engine settings in Supabase');
+        } catch (e) {
+            notify("Failed to sync settings to cloud. Check permissions.");
+        }
     };
 
     const toggleKey = (key: string) => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
@@ -125,7 +137,7 @@ const AdminView: React.FC = () => {
                     <StatBox label="Total Citizens" value={stats.totalUsers} color="text-accent-primary" />
                     <StatBox label="Active Today" value={stats.activeToday} color="text-emerald-400" />
                     <StatBox label="Credits Flowing" value={stats.creditsIssued.toLocaleString()} color="text-purple-400" />
-                    <StatBox label="Server Load" value="Optimal" color="text-cobalt" />
+                    <StatBox label="Engine Node" value={localEngineUrl.includes('localhost') ? "Local" : "Tunnel"} color="text-cobalt" />
                 </div>
 
                 {view === 'users' && (
@@ -235,10 +247,11 @@ const AdminView: React.FC = () => {
                                     value={settings.textModel} 
                                     onChange={(v) => setSettings({...settings, textModel: v})}
                                     options={[
-                                        { label: 'GérerLlama (Local)', value: 'local-gemma' },
-                                        { label: 'Grok 3', value: 'grok-3' },
-                                        { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
-                                        { label: 'GPT-4o', value: 'gpt-4o' }
+                                        { label: 'Grok 2 (Latest)', value: 'grok-2-1212' },
+                                        { label: 'Grok Beta', value: 'grok-beta' },
+                                        { label: 'Grok 3 (Coming Soon)', value: 'grok-3' },
+                                        { label: 'Grok 4.1 Fast Reasoning', value: 'grok-4-1-fast-reasoning' },
+                                        { label: 'GérerLlama (Local)', value: 'local-gemma' }
                                     ]}
                                 />
                                 <ConfigSelect 
@@ -246,9 +259,8 @@ const AdminView: React.FC = () => {
                                     value={settings.imageModel} 
                                     onChange={(v) => setSettings({...settings, imageModel: v})}
                                     options={[
-                                        { label: 'Imagen 3', value: 'imagen-3' },
                                         { label: 'Grok Imagine Pro', value: 'grok-imagine-image-pro' },
-                                        { label: 'DALL-E 3', value: 'dall-e-3' }
+                                        { label: 'Grok Vision Beta', value: 'grok-2-vision-beta' }
                                     ]}
                                 />
 

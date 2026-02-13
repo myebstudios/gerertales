@@ -84,11 +84,21 @@ export const AI_COSTS = {
   WRITING_CHAT: 1,
   IMAGE_COVER: 25,
   IMAGE_BANNER: 20,
-  TTS_CHUNK: 5
+  TTS_CHUNK: 5,
+  RATE_INPUT_TOKEN: 0.001,
+  RATE_OUTPUT_TOKEN: 0.004,
+  RATE_IMAGE: 20,
+  RATE_TTS_CHAR: 0.01,
+  RATE_ELEVENLABS_CHAR: 0.05
 };
 
 export type Theme = 'nordic-dark' | 'midnight' | 'paper-light';
 export type TTSProvider = 'ai' | 'browser';
+
+export const XAI_MODELS = {
+  TEXT: ['grok-2-1212', 'grok-beta', 'grok-3', 'grok-4-1-fast-reasoning'],
+  IMAGE: ['grok-imagine-image-pro', 'grok-2-vision-beta']
+};
 
 export interface AppSettings {
   apiKey: string; // Gemini

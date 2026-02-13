@@ -1,13 +1,23 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { User } from '@supabase/supabase-js';
+import { Story } from '../types';
+import { supabaseService } from '../services/supabaseService';
 
 interface LandingPageProps {
     user: User | null;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ user }) => {
+    const [previewStories, setPreviewStories] = useState<Story[]>([]);
+
+    useEffect(() => {
+        supabaseService.getPublicStories().then(stories => {
+            setPreviewStories(stories.slice(0, 4));
+        });
+    }, []);
+
     return (
         <div className="min-h-screen bg-dark-bg text-text-main font-sans selection:bg-cobalt selection:text-white overflow-x-hidden w-full">
             {/* Nav */}
@@ -97,14 +107,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ user }) => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                        {[
-                            { title: "Echoes of Yaoundé", format: "Novel", image: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?q=80&w=600" },
-                            { title: "The Solar Weaver", format: "Short Story", image: "https://images.unsplash.com/photo-1614728263952-84ea256f9679?q=80&w=600" },
-                            { title: "Midnight in Limbé", format: "Screenplay", image: "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?q=80&w=600" },
-                            { title: "Circuit of Dreams", format: "Comic", image: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600" }
-                        ].map((book, i) => (
+                        {(previewStories.length > 0 ? previewStories : [
+                            { title: "Echoes of Yaoundé", format: "Novel", coverImage: "https://images.unsplash.com/photo-1516280440614-37939bbacd81?q=80&w=600" },
+                            { title: "The Solar Weaver", format: "Short Story", coverImage: "https://images.unsplash.com/photo-1614728263952-84ea256f9679?q=80&w=600" },
+                            { title: "Midnight in Limbé", format: "Screenplay", coverImage: "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?q=80&w=600" },
+                            { title: "Circuit of Dreams", format: "Comic", coverImage: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600" }
+                        ]).map((book: any, i) => (
                             <div key={i} className="group relative aspect-[3/4] bg-zinc-900 rounded-[2rem] overflow-hidden border border-white/5 transition-all duration-500 hover:scale-[1.02] hover:border-white/20 shadow-2xl">
-                                <img src={book.image} className="absolute inset-0 w-full h-full object-cover opacity-50 grayscale group-hover:grayscale-0 group-hover:opacity-80 transition-all duration-700" alt={book.title} />
+                                <img src={book.coverImage} className="absolute inset-0 w-full h-full object-cover opacity-50 grayscale group-hover:grayscale-0 group-hover:opacity-80 transition-all duration-700" alt={book.title} />
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
                                 <div className="absolute bottom-8 left-8 right-8 space-y-2">
                                     <span className="text-[8px] font-black uppercase tracking-widest text-cobalt">{book.format}</span>

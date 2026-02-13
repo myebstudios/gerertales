@@ -142,8 +142,45 @@ export const supabaseService = {
         .from('audit_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(200); // Increased limit for better visibility
       if (error) throw error;
+      return data;
+  },
+
+  // System Config
+  async getSystemConfig(): Promise<any> {
+    const { data, error } = await supabase
+      .from('system_config')
+      .select('config')
+      .eq('id', 'global_settings')
+      .single();
+    
+    if (error) {
+      console.error("Error fetching system config:", error);
+      return null;
+    }
+    return data.config;
+  },
+
+  async updateSystemConfig(config: any) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from('system_config')
+      .upsert({
+        id: 'global_settings',
+        config: config,
+        updated_at: new Date().toISOString(),
+        updated_by: user?.id
+      });
+    
+    if (error) throw error;
+  },
+
+  async deductCreditsSecurely(amount: number, feature: string): Promise<{ success: boolean, newBalance?: number, error?: string }> {
+      const { data, error } = await supabase.functions.invoke('deduct-credits', {
+          body: { amount, feature }
+      });
+      if (error) return { success: false, error: error.message };
       return data;
   },
 
@@ -209,37 +246,22 @@ export const supabaseService = {
         const { data, error } = await supabase
           .from('stories')
           .select(`
-            *,
-            story_likes(count),
-            story_comments(count),
-            story_ratings(rating),
-            profiles(name)
+            id, owner_id, title, spark, tone, format, active_chapter_index, 
+            characters, locations, toc, last_modified, cover_image, 
+            collection, is_public, published_at
           `)
           .eq('is_public', true)
-          .order('published_at', { ascending: false });
+          .order('published_at', { ascending: false })
+          .limit(20);
 
         if (error) {
             console.error("Supabase query error:", error);
             throw error;
         }
         
-        console.log(`Fetched ${data?.length || 0} public stories.`);
-        return data.map(s => {
-          const mapped = this._mapStory(s);
-          const ratings = s.story_ratings || [];
-          const avg = ratings.length > 0 
-            ? ratings.reduce((acc: number, r: any) => acc + r.rating, 0) / ratings.length 
-            : 0;
-
-          return {
-            ...mapped,
-            likesCount: s.story_likes?.[0]?.count || 0,
-            commentsCount: s.story_comments?.[0]?.count || 0,
-            ratingAverage: avg
-          };
-        });
+        return data.map(s => this._mapStory(s));
     } catch (e) {
-        console.error("Public fetch failed completely:", e);
+        console.error("Public fetch failed:", e);
         return [];
     }
   },
