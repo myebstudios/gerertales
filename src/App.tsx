@@ -23,6 +23,8 @@ import SettingsView from './components/SettingsView';
 import Auth from './components/Auth';
 import LandingPage from './components/LandingPage';
 import AdminView from './components/AdminView';
+import StoryReader from './components/StoryReader';
+import StoryDetails from './components/StoryDetails';
 import Dialog from './components/Dialog';
 
 const App: React.FC = () => {
@@ -176,14 +178,7 @@ const App: React.FC = () => {
   };
 
   const handleSelectStory = async (story: Story) => {
-    if (!stories.find(s => s.id === story.id)) setStories([story, ...stories]);
-    setActiveStoryId(story.id);
-    setMessages([{
-        id: 'restore',
-        role: 'model',
-        text: `Welcome to "${story.title}". We are currently at Chapter ${story.activeChapterIndex + 1}.`
-    }]);
-    navigate(`/writing/${story.id}`);
+    navigate(`/details/${story.id}`);
   };
 
   const handleDeleteStory = (id: string, e: React.MouseEvent) => {
@@ -258,7 +253,7 @@ const App: React.FC = () => {
             userTier
         );
         await deductCredits(user, cost, "Prose Generation");
-        updateStoryContent(user, currentStory.id, currentStory.activeChapterIndex, currentContent ? `${currentContent}\n\n${prose}` : prose);
+        updateStoryContent(user, currentStory.id, currentStory.activeStoryId, currentStory.activeChapterIndex, currentContent ? `${currentContent}\n\n${prose}` : prose);
         setMessages([...currentMessages, { id: crypto.randomUUID(), role: 'model', text: "I've added that to the draft. How does it feel?" }]);
       } else {
         const { text: response, cost } = await TextService.generateProse(
@@ -280,9 +275,13 @@ const App: React.FC = () => {
 
   if (authLoading) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted">Loading Studio...</div>;
 
+  const isLandingPage = location.pathname === '/';
+  const isAuthPage = location.pathname.startsWith('/auth');
+  const isReaderPage = location.pathname.startsWith('/read');
+
   return (
     <div className={`flex h-screen w-screen bg-dark-bg text-text-main transition-all duration-500`}>
-      {!['/auth', '/'].includes(location.pathname) && userProfile && (
+      {!isLandingPage && !isAuthPage && !isReaderPage && userProfile && (
         <AppNavigation 
             userProfile={userProfile}
             user={user}
@@ -290,7 +289,7 @@ const App: React.FC = () => {
         />
       )}
       
-      <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings', '/discover'].includes(location.pathname) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
+      <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings', '/discover', '/details', '/read'].some(p => location.pathname.startsWith(p)) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
         <Routes>
           <Route path="/" element={<LandingPage user={user} />} />
           <Route path="/auth" element={user ? <Navigate to="/library" /> : <Auth />} />
@@ -320,9 +319,22 @@ const App: React.FC = () => {
             />
           } />
 
+          <Route path="/details/:storyId" element={<StoryDetails />} />
+          <Route path="/read/:storyId" element={<StoryReader />} />
+
           <Route path="/onboarding" element={
             <Onboarding 
-                onConfirm={(c, b) => createStory(user, c, b)} 
+                onConfirm={async (c, b) => {
+                    const id = await createStory(user, c, b);
+                    if (id) {
+                        setMessages([{
+                            id: 'welcome',
+                            role: 'model',
+                            text: `The canvas is ready. Chapter 1: "${b.toc[0].title}" awaits your lead.`
+                        }]);
+                        navigate(`/writing/${id}`);
+                    }
+                }} 
                 isLoading={isAiProcessing} 
                 onCheckCredits={hasCredits}
                 onDeductCredits={(amt, feat) => deductCredits(user, amt, feat)}
@@ -350,7 +362,7 @@ const App: React.FC = () => {
                                 setStories(stories.map(s => s.id === updated.id ? updated : s));
                                 if (user) supabaseService.saveStory(user.id, updated);
                             }}
-                            onContentUpdate={(content) => updateStoryContent(user, currentStory.id, currentStory.activeChapterIndex, content)}
+                            onContentUpdate={(content) => updateStoryContent(user, currentStory.id, currentStory.id, currentStory.activeChapterIndex, content)}
                             onChapterUpdate={(idx, updates) => {
                                 const updatedChapters = [...currentStory.toc];
                                 updatedChapters[idx] = { ...updatedChapters[idx], ...updates };
@@ -388,7 +400,7 @@ const App: React.FC = () => {
                     stories={stories}
                     onUpdateProfile={setUserProfile}
                     user={user}
-                    onLogout={() => { supabaseService.signOut(); navigate('/auth'); }}
+                    onLogout={async () => { await supabaseService.signOut(); navigate('/'); }}
                 />
             ) : <Navigate to="/auth" />
           } />

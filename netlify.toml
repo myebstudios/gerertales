@@ -30,6 +30,12 @@ status = 200
 force = true
 
 [[redirects]]
+from = "/x-img/*"
+to = "https://imgen.x.ai/:splat"
+status = 200
+force = true
+
+[[redirects]]
 from = "/*"
 to = "/index.html"
 status = 200.0

@@ -51,9 +51,10 @@ export const getConfig = (tier: string = 'free') => {
   const xAIApiKey = settings.xAIApiKey || import.meta.env.VITE_XAI_API_KEY;
   let xai: OpenAI | null = null;
   if (xAIApiKey) {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       xai = new OpenAI({ 
           apiKey: xAIApiKey, 
-          baseURL: "https://api.x.ai/v1",
+          baseURL: isLocal ? "https://api.x.ai/v1" : window.location.origin + "/x-api",
           dangerouslyAllowBrowser: true 
       });
   }

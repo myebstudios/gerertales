@@ -81,7 +81,7 @@ export const useStore = create<StoryState>((set, get) => ({
     }
   },
 
-  createStory: async (user, config, blueprint) => {
+  createStory: async (user: User | null, config: StoryConfig, blueprint: StoryBlueprintData): Promise<string> => {
     set({ isAiProcessing: true });
     const newStoryId = crypto.randomUUID();
     const newStory: Story = {
@@ -98,28 +98,37 @@ export const useStore = create<StoryState>((set, get) => ({
       lastModified: Date.now()
     };
 
+    // Update UI state immediately
     set(state => ({ stories: [newStory, ...state.stories], activeStoryId: newStoryId }));
     
-    if (user) await supabaseService.saveStory(user.id, newStory);
-    
-    // Background cover gen
-    const userTier = get().userProfile?.subscriptionTier || 'free';
-    const { url, cost } = await ImageService.generateCoverImage(config.title, config.tone, config.spark, userTier);
-    
-    if (url) {
-        let finalUrl = url;
-        if (user) {
-            finalUrl = await supabaseService.uploadImage(user.id, url, 'cover.png');
+    // Non-blocking save and cover gen
+    (async () => {
+        try {
+            if (user) await supabaseService.saveStory(user.id, newStory);
+            
+            const userTier = get().userProfile?.subscriptionTier || 'free';
+            const { url, cost } = await ImageService.generateCoverImage(config.title, config.tone, config.spark, userTier);
+            
+            if (url) {
+                let finalUrl = url;
+                if (user) {
+                    const uploaded = await supabaseService.uploadImage(user.id, url, 'cover.png');
+                    if (uploaded) finalUrl = uploaded;
+                }
+                const updatedStory = { ...newStory, coverImage: finalUrl };
+                set(state => ({
+                    stories: state.stories.map(s => s.id === newStoryId ? updatedStory : s)
+                }));
+                if (user) await supabaseService.saveStory(user.id, updatedStory);
+                await get().deductCredits(user, cost, "Cover Image");
+            }
+        } catch (e) {
+            console.error("Background story init failed:", e);
         }
-        const updatedStory = { ...newStory, coverImage: finalUrl };
-        set(state => ({
-            stories: state.stories.map(s => s.id === newStoryId ? updatedStory : s)
-        }));
-        if (user) await supabaseService.saveStory(user.id, updatedStory);
-        await get().deductCredits(user, cost, "Cover Image");
-    }
+    })();
     
     set({ isAiProcessing: false });
+    return newStoryId;
   },
 
   updateStoryContent: async (user, storyId, chapterIndex, content) => {

@@ -197,6 +197,20 @@ export const supabaseService = {
     return data.map(s => this._mapStory(s));
   },
 
+  async getAllStoriesAdmin(): Promise<Story[]> {
+    const { data, error } = await supabase
+      .from('stories')
+      .select(`
+        *,
+        profiles(name)
+      `)
+      .order('last_modified', { ascending: false });
+
+    if (error) throw error;
+
+    return data.map(s => this._mapStory(s));
+  },
+
   async saveStory(userId: string, story: Story) {
     if (!userId) throw new Error("User ID is required to save a story.");
     
@@ -228,6 +242,9 @@ export const supabaseService = {
         console.error("Supabase Save Error:", error);
         throw error;
     }
+
+    // Log the save activity if it's a major update
+    this.logAudit(userId, 'story_update', `Updated story: ${story.title}`, { storyId: story.id });
   },
 
   async deleteStory(userId: string, storyId: string) {
@@ -238,6 +255,7 @@ export const supabaseService = {
       .eq('owner_id', userId);
 
     if (error) throw error;
+    this.logAudit(userId, 'story_delete', `Deleted story ID: ${storyId}`);
   },
 
   async getPublicStories(): Promise<Story[]> {
@@ -245,11 +263,7 @@ export const supabaseService = {
     try {
         const { data, error } = await supabase
           .from('stories')
-          .select(`
-            id, owner_id, title, spark, tone, format, active_chapter_index, 
-            characters, locations, toc, last_modified, cover_image, 
-            collection, is_public, published_at
-          `)
+          .select('*')
           .eq('is_public', true)
           .order('published_at', { ascending: false })
           .limit(20);
@@ -279,7 +293,7 @@ export const supabaseService = {
       .eq('id', storyId)
       .single();
 
-    if (error) return null;
+    if (error || !data) return null;
 
     const mapped = this._mapStory(data);
     const ratings = data.story_ratings || [];
@@ -319,8 +333,9 @@ export const supabaseService = {
   async likeStory(userId: string, storyId: string) {
     const { error } = await supabase
       .from('story_likes')
-      .upsert({ user_id: userId, story_id: storyId });
+      .upsert({ user_id: userId, story_id: story_id });
     if (error) throw error;
+    this.logAudit(userId, 'social', `Liked story ID: ${storyId}`);
   },
 
   async hasUserLiked(userId: string, storyId: string): Promise<boolean> {
@@ -340,6 +355,7 @@ export const supabaseService = {
       .from('story_ratings')
       .upsert({ user_id: userId, story_id: storyId, rating });
     if (error) throw error;
+    this.logAudit(userId, 'social', `Rated story ID: ${storyId} with ${rating}`);
   },
 
   async addComment(userId: string, storyId: string, text: string) {
@@ -347,6 +363,7 @@ export const supabaseService = {
       .from('story_comments')
       .insert({ user_id: userId, story_id: storyId, text });
     if (error) throw error;
+    this.logAudit(userId, 'social', `Commented on story ID: ${storyId}`);
   },
 
   async getComments(storyId: string): Promise<StoryComment[]> {
@@ -385,6 +402,7 @@ export const supabaseService = {
       });
 
     if (error) throw error;
+    this.logAudit(userId, 'social', `Saved story ID: ${storyId} to library`);
   },
 
   async getSavedStories(userId: string): Promise<Story[]> {
@@ -409,7 +427,14 @@ export const supabaseService = {
 
     if (base64Data.startsWith('http')) {
         try {
-            const response = await fetch(base64Data);
+            let fetchUrl = base64Data;
+            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+            
+            if (isProduction && base64Data.includes('imgen.x.ai')) {
+                fetchUrl = base64Data.replace('https://imgen.x.ai', '/x-img');
+            }
+
+            const response = await fetch(fetchUrl);
             if (!response.ok) throw new Error(`Failed to fetch image from URL: ${response.status}`);
             blob = await response.blob();
         } catch (e) {

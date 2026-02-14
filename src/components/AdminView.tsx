@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { AppSettings, UserProfile } from '../types';
+import React, { useEffect, useState, useMemo } from 'react';
+import { AppSettings, UserProfile, Story } from '../types';
 import { useNotify } from '../services/NotificationContext';
 import { supabaseService } from '../services/supabaseService';
 
@@ -28,9 +28,11 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const AdminView: React.FC = () => {
     const [profiles, setProfiles] = useState<UserProfile[]>([]);
+    const [stories, setStories] = useState<Story[]>([]);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [stats, setStats] = useState<GlobalStats>({ totalUsers: 0, totalStories: 0, activeToday: 0, creditsIssued: 0 });
-    const [view, setView] = useState<'users' | 'logs' | 'config'>('users');
+    const [view, setView] = useState<'users' | 'stories' | 'logs' | 'config'>('users');
+    const [logFilter, setLogFilter] = useState<string>('all');
     const { notify } = useNotify();
 
     const localEngineUrl = import.meta.env.VITE_GERERLLAMA_URL || "https://terrorists-eco-filing-repair.trycloudflare.com/api/generate";
@@ -46,14 +48,16 @@ const AdminView: React.FC = () => {
     const loadData = async () => {
         try {
             const allProfiles = await supabaseService.getAllProfiles();
+            const allStories = await supabaseService.getAllStoriesAdmin();
             const logs = await supabaseService.getAuditLogs();
             setProfiles(allProfiles);
+            setStories(allStories);
             setAuditLogs(logs);
 
             // Basic Stats
             setStats({
                 totalUsers: allProfiles.length,
-                totalStories: 0, // Need service method for this
+                totalStories: allStories.length,
                 activeToday: allProfiles.filter(p => new Date(p.joinedDate).toDateString() === new Date().toDateString()).length,
                 creditsIssued: allProfiles.reduce((acc, p) => acc + (p.credits || 0), 0)
             });
@@ -84,16 +88,17 @@ const AdminView: React.FC = () => {
 
     const toggleKey = (key: string) => setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
 
-    const handlePromote = async (user: UserProfile) => {
+    const handleToggleAdmin = async (user: UserProfile) => {
         if (!user.id) return;
         const newIsAdmin = !user.isAdmin;
         try {
+            // Fix: Directly updating isAdmin property in profile table
             await supabaseService.updateProfile(user.id, { isAdmin: newIsAdmin });
             notify(`${user.name} ${newIsAdmin ? 'promoted to' : 'removed from'} Admin.`);
             supabaseService.logAudit(undefined, 'admin_action', `Changed admin status for ${user.name} to ${newIsAdmin}`);
             loadData();
         } catch (e) {
-            notify("Promotion failed.");
+            notify("Admin status update failed.");
         }
     };
 
@@ -109,6 +114,26 @@ const AdminView: React.FC = () => {
         }
     };
 
+    const handleDeleteStory = async (story: Story) => {
+        if (!window.confirm(`Delete story "${story.title}" permanently?`)) return;
+        try {
+            if (story.ownerId) {
+                await supabaseService.deleteStory(story.ownerId, story.id);
+                notify("Story deleted successfully.");
+                loadData();
+            }
+        } catch (e) {
+            notify("Delete failed.");
+        }
+    };
+
+    const filteredLogs = useMemo(() => {
+        if (logFilter === 'all') return auditLogs;
+        return auditLogs.filter(log => log.type === logFilter);
+    }, [auditLogs, logFilter]);
+
+    const logTypes = ['all', ...new Set(auditLogs.map(l => l.type))];
+
     return (
         <div className="flex-1 p-8 overflow-y-auto bg-dark-bg text-text-main font-sans no-scrollbar">
             <div className="max-w-7xl mx-auto space-y-12 pb-20">
@@ -120,7 +145,7 @@ const AdminView: React.FC = () => {
                         <p className="text-text-muted">Platform Governance & Neural Infrastructure</p>
                     </div>
                     <div className="flex gap-2 bg-dark-card border border-dark-border p-1 rounded-xl">
-                        {(['users', 'logs', 'config'] as const).map(v => (
+                        {(['users', 'stories', 'logs', 'config'] as const).map(v => (
                             <button 
                                 key={v}
                                 onClick={() => setView(v)}
@@ -135,9 +160,9 @@ const AdminView: React.FC = () => {
                 {/* Metrics Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <StatBox label="Total Citizens" value={stats.totalUsers} color="text-accent-primary" />
-                    <StatBox label="Active Today" value={stats.activeToday} color="text-emerald-400" />
-                    <StatBox label="Credits Flowing" value={stats.creditsIssued.toLocaleString()} color="text-purple-400" />
-                    <StatBox label="Engine Node" value={localEngineUrl.includes('localhost') ? "Local" : "Tunnel"} color="text-cobalt" />
+                    <StatBox label="Active Stories" value={stats.totalStories} color="text-cobalt" />
+                    <StatBox label="Credits Flowing" value={stats.creditsIssued.toFixed(0)} color="text-purple-400" />
+                    <StatBox label="Engine Node" value={localEngineUrl.includes('localhost') ? "Local" : "Tunnel"} color="text-emerald-400" />
                 </div>
 
                 {view === 'users' && (
@@ -158,8 +183,8 @@ const AdminView: React.FC = () => {
                                     <tr key={i} className="hover:bg-white/5 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: p.avatarColor }}>
-                                                    {p.name.charAt(0)}
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold overflow-hidden" style={{ backgroundColor: p.avatarColor }}>
+                                                    {p.avatarUrl ? <img src={p.avatarUrl} className="w-full h-full object-cover" /> : p.name.charAt(0)}
                                                 </div>
                                                 <div>
                                                     <div className="font-bold">{p.name}</div>
@@ -169,11 +194,11 @@ const AdminView: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 text-zinc-400">{new Date(p.joinedDate).toLocaleDateString()}</td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${p.subscriptionTier === 'pro' ? 'bg-amber-500/10 text-amber-500' : 'bg-zinc-800 text-zinc-500'}`}>
+                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${p.subscriptionTier === 'studio' ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20' : p.subscriptionTier === 'pro' ? 'bg-amber-500/10 text-amber-500' : 'bg-zinc-800 text-zinc-500'}`}>
                                                 {p.subscriptionTier}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 font-mono">{p.credits}</td>
+                                        <td className="px-6 py-4 font-mono">{p.credits.toFixed(1)}</td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
                                                 {p.isSuperAdmin && <span className="text-purple-400 text-[10px] font-black uppercase tracking-widest border border-purple-400/30 px-2 py-1 rounded">Super</span>}
@@ -193,8 +218,8 @@ const AdminView: React.FC = () => {
                                                 </button>
                                                 {!p.isSuperAdmin && (
                                                     <button 
-                                                        onClick={() => handlePromote(p)} 
-                                                        className="text-zinc-500 hover:text-white text-[10px] font-black uppercase tracking-widest"
+                                                        onClick={() => handleToggleAdmin(p)} 
+                                                        className={`text-[10px] font-black uppercase tracking-widest ${p.isAdmin ? 'text-rose-400 hover:text-rose-300' : 'text-zinc-500 hover:text-white'}`}
                                                     >
                                                         {p.isAdmin ? 'Demote' : 'Promote'}
                                                     </button>
@@ -208,24 +233,89 @@ const AdminView: React.FC = () => {
                     </div>
                 )}
 
+                {view === 'stories' && (
+                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-dark-bg/50 border-b border-dark-border">
+                                <tr>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Tale</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Author</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Format</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500">Status</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-zinc-500 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-dark-border">
+                                {stories.map((s, i) => (
+                                    <tr key={i} className="hover:bg-white/5 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-14 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
+                                                    {s.coverImage && <img src={s.coverImage} className="w-full h-full object-cover" />}
+                                                </div>
+                                                <div className="max-w-xs">
+                                                    <div className="font-bold truncate">{s.title}</div>
+                                                    <div className="text-[10px] text-zinc-500 line-clamp-1">{s.spark}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-zinc-400 font-medium">{s.ownerName || 'Unknown Writer'}</td>
+                                        <td className="px-6 py-4 text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{s.format}</td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${s.isPublic ? 'bg-cobalt/20 text-cobalt border border-cobalt/20' : 'bg-zinc-800 text-zinc-500'}`}>
+                                                {s.isPublic ? 'Public' : 'Private'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button 
+                                                onClick={() => handleDeleteStory(s)}
+                                                className="text-rose-400 hover:text-rose-300 text-[10px] font-black uppercase tracking-widest"
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
                 {view === 'logs' && (
-                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden flex flex-col h-[600px]">
+                    <div className="bg-dark-card border border-dark-border rounded-3xl overflow-hidden flex flex-col h-[700px]">
                         <div className="px-8 py-5 border-b border-dark-border bg-dark-bg/50 flex justify-between items-center">
-                            <h2 className="font-serif font-bold text-lg">System Pulse Log</h2>
+                            <div className="flex items-center gap-6">
+                                <h2 className="font-serif font-bold text-lg">System Pulse Log</h2>
+                                <div className="flex gap-2">
+                                    {logTypes.map(t => (
+                                        <button 
+                                            key={t}
+                                            onClick={() => setLogFilter(t)}
+                                            className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all ${logFilter === t ? 'bg-cobalt text-white' : 'bg-zinc-800 text-zinc-500 hover:text-white'}`}
+                                        >
+                                            {t}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <button onClick={loadData} className="text-[10px] uppercase font-black tracking-widest text-zinc-600 hover:text-cobalt font-sans transition-colors">Refresh</button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6 space-y-4 font-mono text-[11px] no-scrollbar">
-                            {auditLogs.map((log, i) => (
+                            {filteredLogs.map((log, i) => (
                                 <div key={i} className="flex gap-4 py-3 border-b border-dark-border last:border-0 group">
-                                    <span className="text-zinc-600 shrink-0">{new Date(log.created_at).toLocaleTimeString()}</span>
-                                    <span className={`font-black shrink-0 ${
-                                        log.type === 'auth' ? 'text-accent-primary' : 
-                                        log.type === 'admin_action' ? 'text-rose-400' : 
-                                        log.type === 'billing' ? 'text-emerald-400' : 'text-purple-400'
+                                    <span className="text-zinc-600 shrink-0">{new Date(log.created_at).toLocaleString()}</span>
+                                    <span className={`font-black shrink-0 px-2 rounded ${
+                                        log.type === 'auth' ? 'text-accent-primary bg-accent-primary/10' : 
+                                        log.type === 'admin_action' ? 'text-rose-400 bg-rose-400/10' : 
+                                        log.type === 'billing' ? 'text-emerald-400 bg-emerald-400/10' : 
+                                        log.type === 'social' ? 'text-sky-400 bg-sky-400/10' :
+                                        log.type === 'story_update' ? 'text-amber-400 bg-amber-400/10' :
+                                        'text-purple-400 bg-purple-400/10'
                                     }`}>
                                         {log.type.toUpperCase()}
                                     </span>
-                                    <span className="text-zinc-300 break-all leading-relaxed">{log.message}</span>
+                                    <span className="text-zinc-300 break-all leading-relaxed flex-1">{log.message}</span>
+                                    {log.metadata && <span className="text-zinc-700 text-[9px] truncate max-w-[200px]">{JSON.stringify(log.metadata)}</span>}
                                 </div>
                             ))}
                         </div>
@@ -241,9 +331,8 @@ const AdminView: React.FC = () => {
                             </div>
 
                             <div className="space-y-6">
-                                {/* Model Selections - Preserving current logic but styled */}
                                 <ConfigSelect 
-                                    label="Active Text Model" 
+                                    label="Default Site-wide Text Model" 
                                     value={settings.textModel} 
                                     onChange={(v) => setSettings({...settings, textModel: v})}
                                     options={[
@@ -261,6 +350,16 @@ const AdminView: React.FC = () => {
                                     options={[
                                         { label: 'Grok Imagine Pro', value: 'grok-imagine-image-pro' },
                                         { label: 'Grok Vision Beta', value: 'grok-2-vision-beta' }
+                                    ]}
+                                />
+                                <ConfigSelect 
+                                    label="Default Voice Engine" 
+                                    value={settings.ttsModel} 
+                                    onChange={(v) => setSettings({...settings, ttsModel: v})}
+                                    options={[
+                                        { label: 'OpenAI TTS (Default)', value: 'tts-1' },
+                                        { label: 'OpenAI TTS HD', value: 'tts-1-hd' },
+                                        { label: 'ElevenLabs (Premium)', value: 'eleven_v3' }
                                     ]}
                                 />
 

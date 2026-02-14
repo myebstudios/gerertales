@@ -13,13 +13,13 @@ interface OnboardingProps {
 }
 
 const RANDOM_SPARKS = [
-  "A clockmaker invents a device that stops time for everyone but him.",
-  "A botanist discovers a plant that grows faster when told secrets.",
-  "In a city where silence is currency, a musician becomes a thief.",
-  "A letter arrives 50 years late, revealing a family secret.",
-  "A chef whose dishes make people remember their forgotten childhoods.",
-  "An architect designs a building that doesn't exist in the daylight.",
-  "A detective investigates a crime that hasn't happened yet."
+  "In a city where dreams are harvested for energy, a boy wakes up with a recurring dream that could short-circuit the grid.",
+  "An antique mirror that doesn't reflect the present, but showing the room exactly as it will appear in one hundred years.",
+  "A nomadic tribe that lives on the back of a giant, ancient sky-whale, following the celestial currents.",
+  "A world-renowned pianist whose music physically constructs the scenery around the audience.",
+  "The last librarian in a universe where information is strictly auditory, guarding the only remaining physical book.",
+  "A clockmaker who is commissioned to build a heart for a clockwork prince, using the ticking of a forgotten god's heart.",
+  "In a society where every lie told manifest as a small, physical stone, a man attempts to build a cathedral."
 ];
 
 const FORMAT_OPTIONS: StoryFormat[] = [
@@ -37,6 +37,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
   const [spark, setSpark] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { notify } = useNotify();
+  const isOwner = true; // Onboarding is always owner context
   
   // Proposed Config
   const [title, setTitle] = useState('');
@@ -383,18 +384,21 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
                                         </svg>
                                     </button>
                                     <input 
+                                        readOnly={!isOwner}
                                         className="w-full bg-transparent font-serif font-bold text-text-main focus:outline-none border-b border-transparent focus:border-cobalt"
                                         value={char.name}
                                         onChange={(e) => updateCharacter(idx, 'name', e.target.value)}
                                         placeholder="Character Name"
                                     />
                                     <input 
+                                        readOnly={!isOwner}
                                         className="w-full bg-transparent text-xs text-cobalt/80 focus:outline-none border-b border-transparent focus:border-cobalt uppercase tracking-[0.1em] font-medium"
                                         value={char.role}
                                         onChange={(e) => updateCharacter(idx, 'role', e.target.value)}
                                         placeholder="Role (e.g. Protagonist)"
                                     />
                                      <textarea 
+                                        readOnly={!isOwner}
                                         className="w-full bg-transparent text-sm text-zinc-400 focus:outline-none border-b border-transparent focus:border-cobalt resize-none leading-relaxed"
                                         value={char.description || char.trait}
                                         onChange={(e) => updateCharacter(idx, 'description', e.target.value)}
@@ -417,12 +421,14 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
                                     <span className="text-zinc-600 font-mono text-xs pt-1 mt-1">{(idx + 1).toString().padStart(2, '0')}</span>
                                     <div className="flex-1 space-y-3">
                                          <input 
+                                            readOnly={!isOwner}
                                             className="w-full bg-transparent font-serif font-medium text-lg text-text-main focus:outline-none border-b border-transparent focus:border-cobalt"
                                             value={chapter.title}
                                             onChange={(e) => updateChapter(idx, 'title', e.target.value)}
                                             placeholder="Scene Title"
                                         />
                                         <textarea 
+                                            readOnly={!isOwner}
                                             className="w-full bg-transparent text-sm text-zinc-400 focus:outline-none border-b border-transparent focus:border-cobalt resize-none leading-relaxed"
                                             value={chapter.summary}
                                             onChange={(e) => updateChapter(idx, 'summary', e.target.value)}
@@ -430,6 +436,48 @@ const Onboarding: React.FC<OnboardingProps> = ({ onConfirm, isLoading, onCheckCr
                                             placeholder="What happens in this scene?"
                                         />
                                     </div>
+                                </div>
+                            ))}
+                         </div>
+                    </div>
+
+                    {/* Locations */}
+                    <div className="space-y-4">
+                         <div className="flex items-center justify-between sticky top-0 bg-dark-surface py-2 z-10">
+                            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-cobalt">World Atlas</h3>
+                            <button 
+                                onClick={() => setLocations([...locations, { name: '', description: '' }])}
+                                className="text-[10px] text-zinc-500 hover:text-white uppercase tracking-widest transition-colors"
+                            >
+                                + Add Location
+                            </button>
+                         </div>
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {locations.map((loc, idx) => (
+                                <div key={idx} className="bg-zinc-800/30 border border-dark-border rounded-xl p-5 space-y-3 relative group/card">
+                                    <button 
+                                        onClick={() => setLocations(locations.filter((_, i) => i !== idx))}
+                                        className="absolute top-4 right-4 text-zinc-600 hover:text-red-500 opacity-0 group-hover/card:opacity-100 transition-all"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                    <input 
+                                        readOnly={!isOwner}
+                                        className="w-full bg-transparent font-serif font-bold text-text-main focus:outline-none border-b border-transparent focus:border-cobalt"
+                                        value={loc.name}
+                                        onChange={(e) => updateLocation(idx, 'name', e.target.value)}
+                                        placeholder="Location Name"
+                                    />
+                                    <textarea 
+                                        readOnly={!isOwner}
+                                        className="w-full bg-transparent text-sm text-zinc-400 focus:outline-none border-b border-transparent focus:border-cobalt resize-none leading-relaxed"
+                                        value={loc.description}
+                                        onChange={(e) => updateLocation(idx, 'description', e.target.value)}
+                                        rows={2}
+                                        placeholder="Brief description of the setting..."
+                                    />
                                 </div>
                             ))}
                          </div>

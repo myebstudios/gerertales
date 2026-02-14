@@ -4,6 +4,13 @@ import { getConfig, RATE_IMAGE } from "./aiUtils";
 const compressImage = (base64: string): Promise<string> => {
     return new Promise((resolve) => {
         const img = new Image();
+        
+        let src = base64;
+        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+        if (isProduction && base64.includes('imgen.x.ai')) {
+            src = base64.replace('https://imgen.x.ai', '/x-img');
+        }
+
         img.crossOrigin = "anonymous";
         img.onload = () => {
             const canvas = document.createElement('canvas');

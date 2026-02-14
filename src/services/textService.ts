@@ -67,11 +67,18 @@ export const analyzeStoryConcept = async (spark: string, tier: string = 'free'):
   const { xai, textModel } = getConfig(tier);
   
   const prompt = `
-    Analyze this story idea ("Spark"): "${spark}".
-    Respond with a JSON object containing the following keys:
+    Task: Analyze this unique story idea ("Spark"): "${spark}"
+    
+    Requirements:
+    1. Be highly creative and avoid cliches.
+    2. Deeply explore the specific themes mentioned in the spark.
+    3. Suggest a title that is evocative and non-generic.
+    4. Define a complex, multi-layered tone.
+    
+    Respond with a JSON object ONLY:
     {
-      "title": "A compelling Title",
-      "tone": "A distinct Tone",
+      "title": "...",
+      "tone": "...",
       "recommendedChapters": 5,
       "recommendedFormat": "Novel"
     }
@@ -82,7 +89,7 @@ export const analyzeStoryConcept = async (spark: string, tier: string = 'free'):
     return { data: JSON.parse(cleanJson(content)), cost };
   }
 
-  const systemPrompt = "You are a creative writing assistant. Respond in valid JSON.";
+  const systemPrompt = "You are a master literary consultant known for avant-garde and highly original story architectures. Never suggest generic or repetitive plots. Respond in valid JSON.";
   const { content, cost } = await callAIText(xai, textModel, systemPrompt, prompt, true);
   return { data: JSON.parse(cleanJson(content)), cost };
 };
@@ -102,6 +109,13 @@ export const generateStoryArchitecture = async (
     Format: ${format}
     Target Length: ${chapterCount} Chapters/Scenes.
 
+    Construct a detailed, unique blueprint. Ensure the narrative arc follows a sophisticated progression.
+    
+    Include:
+    - Dramatis Personae: Complex characters with unique traits.
+    - World Atlas: Specific, atmospheric locations that impact the plot.
+    - Narrative Arc: Chapter summaries that avoid repetitive structures and focus on evolving tension.
+
     Create the blueprint in JSON format:
     {
       "characters": [{ "name": "...", "role": "...", "trait": "...", "description": "..." }],
@@ -117,7 +131,7 @@ export const generateStoryArchitecture = async (
     return { data: { characters: data.characters, locations: data.locations || [], toc: chapters }, cost };
   }
 
-  const systemPrompt = `You are a story architect. Respond in valid JSON.`;
+  const systemPrompt = `You are a world-class story architect and world-builder. Your specialty is intricate plots and atmospheric settings. Respond in valid JSON.`;
   const { content, cost } = await callAIText(xai, textModel, systemPrompt, prompt, true);
   const data = JSON.parse(cleanJson(content));
   const chapters: Chapter[] = data.toc.map((c: any) => ({ ...c, content: "", isCompleted: false }));
