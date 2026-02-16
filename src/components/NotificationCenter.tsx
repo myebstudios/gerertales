@@ -53,10 +53,10 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     };
 
     return (
-        <div className="fixed top-6 left-20 w-96 max-h-[calc(100vh-48px)] bg-dark-card border border-white/10 rounded-3xl shadow-2xl z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-left-4 duration-300">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
-                <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-400">The Ledger of Activity</h3>
-                <button onClick={onClose} className="text-zinc-600 hover:text-white transition-all">
+        <div className="fixed top-6 left-[72px] w-96 max-h-[calc(100vh-48px)] bg-dark-card/95 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-left-4 duration-500">
+            <div className="p-8 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
+                <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-cobalt">The Ledger of Activity</h3>
+                <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-600 hover:text-white hover:bg-white/5 transition-all">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
             </div>

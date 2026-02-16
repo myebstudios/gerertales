@@ -78,23 +78,25 @@ export const useStore = create<StoryState>((set, get) => ({
   },
 
   fetchNotifications: async (userId) => {
-    const notifications = await supabaseService.getNotifications(userId);
-    set({ 
-      notifications, 
-      unreadNotificationsCount: notifications.filter(n => !n.isRead).length 
-    });
+    try {
+      const notifications = await supabaseService.getNotifications(userId);
+      set({ 
+        notifications, 
+        unreadNotificationsCount: notifications.filter(n => !n.isRead).length 
+      });
 
-    // Setup Real-time listener
-    supabaseService.subscribeToNotifications(userId, (newNotif) => {
-      const current = get().notifications;
-      if (!current.find(n => n.id === newNotif.id)) {
-        const updated = [newNotif, ...current];
-        set({
-          notifications: updated,
-          unreadNotificationsCount: updated.filter(n => !n.isRead).length
+      // Setup Real-time listener
+      supabaseService.subscribeToNotifications(userId, (newNotif) => {
+        set((state) => {
+          if (state.notifications.find(n => n.id === newNotif.id)) return state;
+          const updated = [newNotif, ...state.notifications];
+          return {
+            notifications: updated,
+            unreadNotificationsCount: updated.filter(n => !n.isRead).length
+          };
         });
-      }
-    });
+      });
+    } catch (e) { console.error("Notification fetch failed", e); }
   },
 
   markAsRead: async (notificationId) => {

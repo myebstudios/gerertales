@@ -482,7 +482,7 @@ export const supabaseService = {
 
   subscribeToNotifications(userId: string, onNewNotification: (notification: Notification) => void) {
     return supabase
-      .channel('new_notifications')
+      .channel(`notifications:${userId}`)
       .on(
         'postgres_changes',
         {

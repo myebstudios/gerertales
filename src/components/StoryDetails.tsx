@@ -236,6 +236,24 @@ const StoryDetails: React.FC = () => {
                             <div className="space-y-3">
                                 {isOwner && <button onClick={() => navigate(`/writing/${story.id}`)} className="w-full py-4 rounded-2xl bg-white text-black text-[11px] font-black uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all shadow-xl shadow-white/5">Continue Writing</button>}
                                 <button onClick={() => navigate(`/read/${story.id}`)} className="w-full py-4 rounded-2xl bg-cobalt text-white text-[11px] font-black uppercase tracking-[0.2em] hover:bg-blue-500 transition-all shadow-xl shadow-cobalt/20">Enter Reading Mode</button>
+                                
+                                {/* Add to Collection for Non-Owners */}
+                                {!isOwner && (
+                                    <button 
+                                        onClick={() => {
+                                            if (userProfile?.id) {
+                                                supabaseService.saveToPersonalLibrary(userProfile.id, story.id);
+                                                notify("Added to your collection!");
+                                            } else {
+                                                notify("Sign in to build your collection.");
+                                            }
+                                        }}
+                                        className="w-full py-4 rounded-2xl bg-zinc-800 text-white text-[11px] font-black uppercase tracking-[0.2em] hover:bg-zinc-700 transition-all shadow-xl"
+                                    >
+                                        Add to Collection
+                                    </button>
+                                )}
+
                                 {isOwner && (
                                     <button
                                         onClick={togglePublish}

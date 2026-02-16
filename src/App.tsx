@@ -164,15 +164,20 @@ const App: React.FC = () => {
     if (pathParts[1] === 'writing' && pathParts[2]) {
       const storyId = pathParts[2];
       if (!activeStoryId || activeStoryId !== storyId) {
-        setActiveStoryId(storyId);
-        if (!stories.find(s => s.id === storyId)) {
+        const localStory = stories.find(s => s.id === storyId);
+        if (localStory) {
+          setActiveStoryId(storyId);
+        } else {
           supabaseService.getStoryById(storyId).then(story => {
-            if (story) setStories([story, ...stories]);
+            if (story) {
+              setStories([story, ...stories]);
+              setActiveStoryId(storyId); // Set it again after the story is in state
+            }
           });
         }
       }
     }
-  }, [location.pathname]);
+  }, [location.pathname, stories.length]); // Added stories.length to dependency
 
   const userTier = userProfile?.subscriptionTier || 'free';
 
