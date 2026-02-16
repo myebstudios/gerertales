@@ -87,7 +87,10 @@ const App: React.FC = () => {
             }
           }
           setUserProfile(profile);
-          if (['/', '/auth'].includes(location.pathname)) navigate('/library');
+          // Only navigate to library if we are at root or auth pages to allow direct linking to stories
+          if (['/', '/auth'].includes(location.pathname)) {
+            navigate('/library');
+          }
           supabaseService.logAudit(user.id, 'auth', 'User logged in');
         } else {
           const metadata = user.user_metadata;
