@@ -374,7 +374,7 @@ const App: React.FC = () => {
                         setStories(stories.map(s => s.id === updated.id ? updated : s));
                         if (user) supabaseService.saveStory(user.id, updated);
                       }}
-                      onContentUpdate={(content) => updateStoryContent(user, currentStory.id, currentStory.id, currentStory.activeChapterIndex, content)}
+                      onContentUpdate={(content) => updateStoryContent(user, currentStory.id, currentStory.activeChapterIndex, content)}
                       onChapterUpdate={(idx, updates) => {
                         const updatedChapters = [...currentStory.toc];
                         updatedChapters[idx] = { ...updatedChapters[idx], ...updates };

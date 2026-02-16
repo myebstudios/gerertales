@@ -53,7 +53,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
     };
 
     return (
-        <div className="absolute top-20 right-8 w-96 max-h-[600px] bg-dark-card border border-white/10 rounded-3xl shadow-2xl z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-6 left-20 w-96 max-h-[calc(100vh-48px)] bg-dark-card border border-white/10 rounded-3xl shadow-2xl z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-left-4 duration-300">
             <div className="p-6 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
                 <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-400">The Ledger of Activity</h3>
                 <button onClick={onClose} className="text-zinc-600 hover:text-white transition-all">
