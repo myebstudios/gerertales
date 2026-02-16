@@ -64,17 +64,44 @@ export const useStore = create<StoryState>((set, get) => ({
   },
 
   loadUserContent: async (user) => {
-    const profile = await supabaseService.getProfile(user.id);
-    const cloudStories = await supabaseService.getStories(user.id);
-    // Fetch Global Config
-    const globalConfig = await supabaseService.getSystemConfig();
-    if (globalConfig) {
-      const saved = localStorage.getItem('gerertales_settings');
-      const current = saved ? JSON.parse(saved) : {};
-      localStorage.setItem('gerertales_settings', JSON.stringify({ ...globalConfig, ...current }));
+    try {
+      const profile = await supabaseService.getProfile(user.id);
+      
+      // Fetch BOTH owned stories and stories saved from the public library
+      const ownedStories = await supabaseService.getStories(user.id);
+      const savedStories = await supabaseService.getSavedStories(user.id);
+      
+      // Merge and remove duplicates (though IDs should be unique)
+      const allStories = [...ownedStories];
+      savedStories.forEach(saved => {
+        if (!allStories.find(s => s.id === saved.id)) {
+          allStories.push(saved);
+        }
+      });
+
+      // Fetch Global Config
+      const globalConfig = await supabaseService.getSystemConfig();
+      if (globalConfig) {
+        const saved = localStorage.getItem('gerertales_settings');
+        const current = saved ? JSON.parse(saved) : {};
+        localStorage.setItem('gerertales_settings', JSON.stringify({ ...globalConfig, ...current }));
+      }
+
+      set({ userProfile: profile, stories: allStories });
+      
+      // If we are currently on a writing page, ensure messages are synced
+      const pathParts = window.location.pathname.split('/');
+      if (pathParts[1] === 'writing' && pathParts[2]) {
+        const currentStory = allStories.find(s => s.id === pathParts[2]);
+        if (currentStory) {
+          set({ messages: currentStory.messages || [] });
+        }
+      }
+
+      await get().fetchNotifications(user.id);
+    } catch (e) {
+      console.error("Store sync failed", e);
     }
-    set({ userProfile: profile, stories: cloudStories });
-    await get().fetchNotifications(user.id);
   },
 
   fetchNotifications: async (userId) => {

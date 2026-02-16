@@ -23,9 +23,9 @@ export const VOICE_LISTS: Record<string, any> = {
         { name: 'Antoni', id: 'ErXw79k9X55p24L2tq0O' },
         { name: 'Elli', id: 'MF3mGyEYCl7XYWbV9V6O' },
         { name: 'Josh', id: 'Tx33qxS9ppHS7LmdUv7O' },
-        { name: 'Amara (African)', id: 'qInm9P9uHqF7b2184uBy' },
-        { name: 'Oluchi (African)', id: 'az7P6S9O2Z4J1W7K5L8I' },
-        { name: 'Adewale (African)', id: 'bV6P1K3S7L5M9N0O8P4Q' },
+        { name: 'Amara (African)', id: 'SAz9YHcvj6GT2ys8y8Z1' },
+        { name: 'Tayo (African)', id: '2EiwWnXFnvU5JabPnv8n' },
+        { name: 'Adewale (African)', id: 'onw9f1STCHnZhwqPNo4n' },
         { name: 'Arnold', id: 'VR6A9C78zM76B9Xp6m3U' },
         { name: 'Adam', id: 'pNInz6S6IPD9S0G42LdD' }
     ],

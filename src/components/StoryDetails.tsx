@@ -240,10 +240,13 @@ const StoryDetails: React.FC = () => {
                                 {/* Add to Collection for Non-Owners */}
                                 {!isOwner && (
                                     <button 
-                                        onClick={() => {
-                                            if (userProfile?.id) {
-                                                supabaseService.saveToPersonalLibrary(userProfile.id, story.id);
+                                        onClick={async () => {
+                                            if (userProfile?.id && story) {
+                                                await supabaseService.saveToPersonalLibrary(userProfile.id, story.id);
                                                 notify("Added to your collection!");
+                                                // Refresh library state to include the newly saved story
+                                                const { data: { user } } = await supabaseService.getCurrentUser() as any;
+                                                if (user) useStore.getState().loadUserContent(user);
                                             } else {
                                                 notify("Sign in to build your collection.");
                                             }
