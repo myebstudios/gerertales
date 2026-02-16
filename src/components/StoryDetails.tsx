@@ -21,9 +21,15 @@ const StoryDetails: React.FC = () => {
     const [isGeneratingCover, setIsGeneratingCover] = useState(false);
     const [generatingChapterIdx, setGeneratingChapterIdx] = useState<number | null>(null);
 
+    // Social 2.0 State
+    const [isFollowing, setIsFollowing] = useState(false);
+    const [comments, setComments] = useState<StoryComment[]>([]);
+    const [newComment, setNewComment] = useState('');
+    const [replyTo, setReplyTo] = useState<string | null>(null);
+
     useEffect(() => {
         if (storyId) {
-            // Check local storage first (fix for local/guest stories cover image)
+            // Check local storage first
             const savedStories = localStorage.getItem('gerertales_stories');
             if (savedStories) {
                 const stories = JSON.parse(savedStories);
@@ -31,17 +37,58 @@ const StoryDetails: React.FC = () => {
                 if (localStory) {
                     setStory(localStory);
                     setIsLoading(false);
-                    return;
                 }
             }
 
-            // Fallback to Supabase
-            supabaseService.getStoryById(storyId).then(res => {
-                if (res) setStory(res);
+            // Fallback to Supabase + Social Data
+            const fetchData = async () => {
+                const res = await supabaseService.getStoryById(storyId);
+                if (res) {
+                    setStory(res);
+                    const comms = await supabaseService.getComments(storyId);
+                    setComments(comms);
+                    
+                    if (userProfile?.id && res.ownerId) {
+                        const following = await supabaseService.isFollowing(userProfile.id, res.ownerId);
+                        setIsFollowing(following);
+                    }
+                }
                 setIsLoading(false);
-            }).catch(() => setIsLoading(false));
+            };
+            fetchData();
         }
-    }, [storyId]);
+    }, [storyId, userProfile]);
+
+    const handleFollow = async () => {
+        if (!userProfile?.id || !story?.ownerId) return;
+        try {
+            if (isFollowing) {
+                await supabaseService.unfollowUser(userProfile.id, story.ownerId);
+                setIsFollowing(false);
+                notify(`Unfollowed ${story.ownerName}`);
+            } else {
+                await supabaseService.followUser(userProfile.id, story.ownerId);
+                setIsFollowing(true);
+                notify(`Following ${story.ownerName}`);
+            }
+        } catch (e) { notify("Connection failed."); }
+    };
+
+    const handleAddComment = async () => {
+        if (!userProfile?.id || !storyId || !newComment.trim()) return;
+        try {
+            if (replyTo) {
+                await supabaseService.addReply(userProfile.id, storyId, replyTo, newComment);
+            } else {
+                await supabaseService.addComment(userProfile.id, storyId, newComment);
+            }
+            setNewComment('');
+            setReplyTo(null);
+            const comms = await supabaseService.getComments(storyId);
+            setComments(comms);
+            notify("Thought added to the ledger.");
+        } catch (e) { notify("Failed to post comment."); }
+    };
 
     const handleSave = async () => {
         if (!story || !userProfile?.id) return;
@@ -134,6 +181,25 @@ const StoryDetails: React.FC = () => {
                         </span>
                         <h1 className="text-5xl md:text-7xl font-serif text-white tracking-tighter">{story.title}</h1>
                         <p className="text-zinc-400 font-serif italic text-lg max-w-2xl mx-auto line-clamp-2">"{story.spark}"</p>
+                        
+                        {/* Author Info & Follow */}
+                        <div className="pt-4 flex items-center justify-center gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-zinc-400 overflow-hidden">
+                                    {story.ownerAvatar ? <img src={story.ownerAvatar} className="w-full h-full object-cover" /> : story.ownerName?.charAt(0)}
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-300">By {story.ownerName || 'Unknown Writer'}</span>
+                            </div>
+                            {userProfile?.id !== story.ownerId && (
+                                <button 
+                                    onClick={handleFollow}
+                                    className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all border
+                                    ${isFollowing ? 'border-zinc-700 text-zinc-500 hover:border-rose-500/30 hover:text-rose-400' : 'border-cobalt/30 text-cobalt hover:bg-cobalt/10'}`}
+                                >
+                                    {isFollowing ? 'Unfollow' : 'Follow Author'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -187,8 +253,8 @@ const StoryDetails: React.FC = () => {
                     <div className="lg:col-span-8 space-y-12">
                         {/* Tabs */}
                         <div className="flex gap-8 border-b border-white/5">
-                            {(['info', 'cast', 'chapters'] as const).map(tab => (
-                                <button key={tab} onClick={() => setActiveTab(tab)} className={`pb-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all relative ${activeTab === tab ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
+                            {(['info', 'cast', 'chapters', 'comments'] as const).map(tab => (
+                                <button key={tab} onClick={() => setActiveTab(tab as any)} className={`pb-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all relative ${activeTab === tab ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
                                     {tab}
                                     {activeTab === tab && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-cobalt shadow-[0_0_10px_var(--color-cobalt)]" />}
                                 </button>
@@ -266,6 +332,73 @@ const StoryDetails: React.FC = () => {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        )}
+
+                        {activeTab === ('comments' as any) && (
+                            <div className="space-y-12 animate-in fade-in slide-in-from-right-4">
+                                {/* Comment Input */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600">
+                                            {replyTo ? 'Replying to Thought' : 'Add your Thought'}
+                                        </label>
+                                        {replyTo && <button onClick={() => setReplyTo(null)} className="text-[9px] text-zinc-500 hover:text-white uppercase tracking-widest">Cancel Reply</button>}
+                                    </div>
+                                    <div className="flex gap-4">
+                                        <textarea
+                                            value={newComment}
+                                            onChange={(e) => setNewComment(e.target.value)}
+                                            placeholder={replyTo ? "What's your response?..." : "Share your thoughts on this tale..."}
+                                            className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 text-sm font-serif text-zinc-300 outline-none focus:border-cobalt transition-all resize-none h-24"
+                                        />
+                                        <button
+                                            onClick={handleAddComment}
+                                            disabled={!newComment.trim()}
+                                            className="px-6 rounded-2xl bg-zinc-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-zinc-700 transition-all disabled:opacity-30 self-end h-24"
+                                        >
+                                            Post
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Comments List */}
+                                <div className="space-y-8">
+                                    {comments.length === 0 ? (
+                                        <div className="text-center py-12 border border-white/5 rounded-3xl bg-white/5 italic text-zinc-600 font-serif">
+                                            No thoughts recorded yet. Be the first to start the ledger.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            {/* Logic for flat list with reply labels or threaded - for now flat with reply buttons */}
+                                            {comments.map((comment) => (
+                                                <div key={comment.id} className={`group space-y-3 ${comment.parentId ? 'ml-12 border-l border-white/5 pl-6' : ''}`}>
+                                                    <div className="flex justify-between items-center">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase tracking-widest text-white">{comment.userName}</span>
+                                                            <span className="text-[9px] text-zinc-600">•</span>
+                                                            <span className="text-[9px] text-zinc-600 uppercase tracking-widest">
+                                                                {new Date(comment.createdAt).toLocaleDateString()}
+                                                            </span>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => {
+                                                                setReplyTo(comment.id);
+                                                                document.querySelector('textarea')?.focus();
+                                                            }}
+                                                            className="text-[9px] font-black uppercase tracking-widest text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-cobalt transition-all"
+                                                        >
+                                                            Reply
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-sm font-serif text-zinc-400 leading-relaxed italic">
+                                                        "{comment.text}"
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>

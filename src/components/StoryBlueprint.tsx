@@ -663,6 +663,24 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                         </svg>
                     </button>
 
+                    {/* Notify Collection (Owner Only) */}
+                    {isOwner && (
+                        <button
+                            onClick={async () => {
+                                if (userId) {
+                                    await supabaseService.notifyStoryUpdate(userId, story.id);
+                                    notify("Followers and collectors notified!");
+                                }
+                            }}
+                            className="p-2.5 rounded-xl text-zinc-500 hover:bg-zinc-800 hover:text-white transition-all"
+                            title="Notify your collection of an update"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.062.511.108.773.138m-.773-.138a28.914 28.914 0 000-9.18m0 9.18c.51.072 1.022.12 1.54.144m-1.54-.144a28.272 28.272 0 000-9.18m0 9.18c.252.012.506.02.76.022m-.76-.022a28.278 28.278 0 000-9.18m0 9.18c.117.001.235.001.352 0m-.352 0a28.24 28.24 0 000-9.18m0 9.18c1.61-.199 3.255-.277 4.916-.233m-4.916.233a28.2 28.2 0 000-9.18m4.916.233c.411.011.822.032 1.228.063m-1.228-.063a28.656 28.656 0 000 8.717m1.228-8.654c.465.035.925.08 1.38.135m-1.38-.135a29.022 29.022 0 000 8.384m1.38-8.25c.371.043.74.095 1.104.158m-1.104-.158a29.351 29.351 0 000 7.933m1.104-7.775c.231.04.46.085.688.132m-.688-.132a29.475 29.475 0 000 7.51m.688-7.378c.451.094.893.201 1.325.321m-.532 5.82a22.95 22.95 0 011.233 4.296.75.75 0 01-1.306.657 20.25 20.25 0 00-1.144-3.793M11.356 6.224c.45-.093.89-.201 1.325-.321m0 0c.456-.126.903-.267 1.34-.42m0 0c.427-.15.845-.316 1.25-.497m-1.25.497a29.084 29.084 0 012.492.686m-2.492-.686a29.212 29.212 0 012.492-.686" />
+                            </svg>
+                        </button>
+                    )}
+
                     <div className="relative">
                         <button onClick={() => setShowExportMenu(!showExportMenu)} className={`p-2.5 rounded-xl transition-all ${showExportMenu ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:bg-zinc-800 hover:text-white'}`} title="Export Options">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>

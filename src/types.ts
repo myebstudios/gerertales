@@ -52,6 +52,29 @@ export interface StoryComment {
   userName: string;
   text: string;
   createdAt: number;
+  parentId?: string; // Support for threaded comments
+}
+
+export type NotificationType = 'like' | 'comment' | 'reply' | 'follow' | 'story_update' | 'recommendation' | 'system';
+
+export interface Notification {
+  id: string;
+  recipientId: string;
+  actorId: string;
+  actorName?: string;
+  actorAvatar?: string;
+  type: NotificationType;
+  storyId?: string;
+  storyTitle?: string;
+  commentId?: string;
+  isRead: boolean;
+  createdAt: number;
+}
+
+export interface Follow {
+  followerId: string;
+  followingId: string;
+  createdAt: number;
 }
 
 

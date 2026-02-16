@@ -1,6 +1,6 @@
 
 import { create } from 'zustand';
-import { Story, UserProfile, Message, StoryConfig, StoryBlueprintData } from '../types';
+import { Story, UserProfile, Message, StoryConfig, StoryBlueprintData, Notification } from '../types';
 import { supabaseService } from './supabaseService';
 import { supabase } from './supabaseClient';
 import * as TextService from './textService';
@@ -13,6 +13,8 @@ interface StoryState {
   activeStoryId: string | null;
   messages: Message[];
   isAiProcessing: boolean;
+  notifications: Notification[];
+  unreadNotificationsCount: number;
 
   // Actions
   setStories: (stories: Story[]) => void;
@@ -20,12 +22,15 @@ interface StoryState {
   setActiveStoryId: (id: string | null) => void;
   setMessages: (messages: Message[]) => void;
   setIsAiProcessing: (status: boolean) => void;
+  setNotifications: (notifications: Notification[]) => void;
 
   // Async Thunks
   loadUserContent: (user: User) => Promise<void>;
   createStory: (user: User | null, config: StoryConfig, blueprint: StoryBlueprintData) => Promise<string>;
   updateStoryContent: (user: User | null, storyId: string, chapterIndex: number, content: string) => Promise<void>;
   deductCredits: (user: User | null, amount: number, feature: string) => Promise<boolean>;
+  fetchNotifications: (userId: string) => Promise<void>;
+  markAsRead: (notificationId: string) => Promise<void>;
 }
 
 export const useStore = create<StoryState>((set, get) => ({
@@ -34,12 +39,18 @@ export const useStore = create<StoryState>((set, get) => ({
   activeStoryId: null,
   messages: [],
   isAiProcessing: false,
+  notifications: [],
+  unreadNotificationsCount: 0,
 
   setStories: (stories) => set({ stories }),
   setUserProfile: (userProfile) => set({ userProfile }),
   setActiveStoryId: (activeStoryId) => set({ activeStoryId }),
   setMessages: (messages) => set({ messages }),
   setIsAiProcessing: (isAiProcessing) => set({ isAiProcessing }),
+  setNotifications: (notifications) => set({ 
+    notifications, 
+    unreadNotificationsCount: notifications.filter(n => !n.isRead).length 
+  }),
 
   loadUserContent: async (user) => {
     const profile = await supabaseService.getProfile(user.id);
@@ -52,6 +63,26 @@ export const useStore = create<StoryState>((set, get) => ({
       localStorage.setItem('gerertales_settings', JSON.stringify({ ...globalConfig, ...current }));
     }
     set({ userProfile: profile, stories: cloudStories });
+    await get().fetchNotifications(user.id);
+  },
+
+  fetchNotifications: async (userId) => {
+    const notifications = await supabaseService.getNotifications(userId);
+    set({ 
+      notifications, 
+      unreadNotificationsCount: notifications.filter(n => !n.isRead).length 
+    });
+  },
+
+  markAsRead: async (notificationId) => {
+    await supabaseService.markNotificationAsRead(notificationId);
+    const updated = get().notifications.map(n => 
+      n.id === notificationId ? { ...n, isRead: true } : n
+    );
+    set({ 
+      notifications: updated, 
+      unreadNotificationsCount: updated.filter(n => !n.isRead).length 
+    });
   },
 
   deductCredits: async (user, amount, feature) => {

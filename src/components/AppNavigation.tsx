@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import { User } from '@supabase/supabase-js';
 import { Link, useLocation } from 'react-router-dom';
+import { useStore } from '../services/store';
+import NotificationCenter from './NotificationCenter';
 
 interface AppNavigationProps {
   userProfile?: UserProfile;
@@ -12,6 +14,8 @@ interface AppNavigationProps {
 const AppNavigation: React.FC<AppNavigationProps> = ({ userProfile, user, onLogin }) => {
   const location = useLocation();
   const currentPath = location.pathname;
+  const { unreadNotificationsCount } = useStore();
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
   // Credit Ring Calculation
   const credits = userProfile?.credits || 0;
@@ -84,6 +88,31 @@ const AppNavigation: React.FC<AppNavigationProps> = ({ userProfile, user, onLogi
             New Story
         </span>
       </Link>
+
+      {/* Notifications */}
+      {user && (
+          <div className="relative">
+              <button
+                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                  className={`p-3 rounded-xl transition-all duration-300 group relative
+                    ${isNotificationsOpen ? 'bg-zinc-800 text-cobalt' : 'text-zinc-500 hover:text-text-main hover:bg-zinc-800/50'}`}
+                  title="Notifications"
+              >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                  </svg>
+                  {unreadNotificationsCount > 0 && (
+                      <span className="absolute top-2 right-2 w-4 h-4 bg-rose-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-dark-surface animate-bounce">
+                          {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                      </span>
+                  )}
+              </button>
+              <NotificationCenter 
+                isOpen={isNotificationsOpen} 
+                onClose={() => setIsNotificationsOpen(false)} 
+              />
+          </div>
+      )}
 
       {/* Admin */}
       {userProfile?.isAdmin && (

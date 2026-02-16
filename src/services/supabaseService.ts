@@ -391,8 +391,119 @@ export const supabaseService = {
       userId: c.user_id,
       userName: (c.profiles as any)?.name || 'Unknown Writer',
       text: c.text,
-      createdAt: new Date(c.created_at).getTime()
+      createdAt: new Date(c.created_at).getTime(),
+      parentId: c.parent_id
     }));
+  },
+
+  async addReply(userId: string, storyId: string, parentId: string, text: string) {
+    const { error } = await supabase
+      .from('story_comments')
+      .insert({ user_id: userId, story_id: storyId, parent_id: parentId, text });
+    if (error) throw error;
+    this.logAudit(userId, 'social', `Replied to comment ID: ${parentId}`);
+  },
+
+  // Social 2.0: Follows
+  async followUser(followerId: string, followingId: string) {
+    const { error } = await supabase
+      .from('follows')
+      .upsert({ follower_id: followerId, following_id: followingId });
+    if (error) throw error;
+    this.logAudit(followerId, 'social', `Followed user ID: ${followingId}`);
+  },
+
+  async unfollowUser(followerId: string, followingId: string) {
+    const { error } = await supabase
+      .from('follows')
+      .delete()
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId);
+    if (error) throw error;
+    this.logAudit(followerId, 'social', `Unfollowed user ID: ${followingId}`);
+  },
+
+  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('*')
+      .eq('follower_id', followerId)
+      .eq('following_id', followingId)
+      .maybeSingle();
+    if (error) return false;
+    return !!data;
+  },
+
+  // Social 2.0: Notifications
+  async getNotifications(userId: string): Promise<Notification[]> {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select(`
+        *,
+        actor:profiles!notifications_actor_id_fkey(name, avatar_url),
+        stories(title)
+      `)
+      .eq('recipient_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    return data.map(n => ({
+      id: n.id,
+      recipientId: n.recipient_id,
+      actorId: n.actor_id,
+      actorName: n.actor?.name,
+      actorAvatar: n.actor?.avatar_url,
+      type: n.type,
+      storyId: n.story_id,
+      storyTitle: n.stories?.title,
+      commentId: n.comment_id,
+      isRead: n.is_read,
+      createdAt: new Date(n.created_at).getTime()
+    }));
+  },
+
+  async markNotificationAsRead(notificationId: string) {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId);
+    if (error) throw error;
+  },
+
+  async markAllNotificationsAsRead(userId: string) {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('recipient_id', userId);
+    if (error) throw error;
+  },
+
+  async notifyStoryUpdate(userId: string, storyId: string) {
+    // Notify all users who have this story in their library
+    const { data: saves, error: savesError } = await supabase
+      .from('library_saves')
+      .select('user_id')
+      .eq('story_id', storyId);
+
+    if (savesError) throw savesError;
+
+    const notifications = saves
+      .filter(s => s.user_id !== userId)
+      .map(s => ({
+        recipient_id: s.user_id,
+        actor_id: userId,
+        type: 'story_update',
+        story_id: storyId
+      }));
+
+    if (notifications.length > 0) {
+      const { error } = await supabase
+        .from('notifications')
+        .insert(notifications);
+      if (error) throw error;
+    }
   },
 
   async saveToPersonalLibrary(userId: string, storyId: string) {
