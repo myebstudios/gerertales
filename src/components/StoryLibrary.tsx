@@ -163,19 +163,33 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
     const [filter, setFilter] = useState<StoryFormat | 'All'>('All');
     const [publicStories, setPublicStories] = useState<Story[]>([]);
     const [isLoading, setIsLoading] = useState(isPublicView);
+    const [followedAuthors, setFollowedAuthors] = useState<string[]>([]);
 
     React.useEffect(() => {
-        if (isPublicView) {
-            setIsLoading(true);
-            supabaseService.getPublicStories()
-                .then(setPublicStories)
-                .catch(err => {
+        const fetchPublicData = async () => {
+            if (isPublicView) {
+                setIsLoading(true);
+                try {
+                    const stories = await supabaseService.getPublicStories();
+                    setPublicStories(stories);
+                    
+                    // If user is logged in, fetch their follows to prioritize content
+                    if (currentUserId) {
+                        const { data } = await (supabaseService as any).supabase
+                            .from('follows')
+                            .select('following_id')
+                            .eq('follower_id', currentUserId);
+                        if (data) setFollowedAuthors(data.map((f: any) => f.following_id));
+                    }
+                } catch (err) {
                     console.error("Failed to fetch public stories:", err);
-                    setPublicStories([]);
-                })
-                .finally(() => setIsLoading(false));
-        }
-    }, [isPublicView]);
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+        };
+        fetchPublicData();
+    }, [isPublicView, currentUserId]);
 
     const displayStories = isPublicView ? publicStories : stories;
 
@@ -189,8 +203,17 @@ const StoryLibrary: React.FC<StoryLibraryProps> = ({
     };
 
     const sortedStories = useMemo(() => {
-        return [...displayStories].sort((a, b) => b.lastModified - a.lastModified);
-    }, [displayStories]);
+        return [...displayStories].sort((a, b) => {
+            // Prioritize followed authors in Public View
+            if (isPublicView && followedAuthors.length > 0) {
+                const aIsFollowed = a.ownerId && followedAuthors.includes(a.ownerId);
+                const bIsFollowed = b.ownerId && followedAuthors.includes(b.ownerId);
+                if (aIsFollowed && !bIsFollowed) return -1;
+                if (!aIsFollowed && bIsFollowed) return 1;
+            }
+            return b.lastModified - a.lastModified;
+        });
+    }, [displayStories, isPublicView, followedAuthors]);
 
     const filteredStories = useMemo(() => {
         return sortedStories.filter(s => {

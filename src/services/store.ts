@@ -31,6 +31,7 @@ interface StoryState {
   deductCredits: (user: User | null, amount: number, feature: string) => Promise<boolean>;
   fetchNotifications: (userId: string) => Promise<void>;
   markAsRead: (notificationId: string) => Promise<void>;
+  markAllAsRead: (userId: string) => Promise<void>;
 }
 
 export const useStore = create<StoryState>((set, get) => ({
@@ -72,6 +73,18 @@ export const useStore = create<StoryState>((set, get) => ({
       notifications, 
       unreadNotificationsCount: notifications.filter(n => !n.isRead).length 
     });
+
+    // Setup Real-time listener
+    supabaseService.subscribeToNotifications(userId, (newNotif) => {
+      const current = get().notifications;
+      if (!current.find(n => n.id === newNotif.id)) {
+        const updated = [newNotif, ...current];
+        set({
+          notifications: updated,
+          unreadNotificationsCount: updated.filter(n => !n.isRead).length
+        });
+      }
+    });
   },
 
   markAsRead: async (notificationId) => {
@@ -82,6 +95,15 @@ export const useStore = create<StoryState>((set, get) => ({
     set({ 
       notifications: updated, 
       unreadNotificationsCount: updated.filter(n => !n.isRead).length 
+    });
+  },
+
+  markAllAsRead: async (userId: string) => {
+    await supabaseService.markAllNotificationsAsRead(userId);
+    const updated = get().notifications.map(n => ({ ...n, isRead: true }));
+    set({
+      notifications: updated,
+      unreadNotificationsCount: 0
     });
   },
 

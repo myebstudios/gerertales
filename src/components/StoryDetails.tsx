@@ -363,37 +363,66 @@ const StoryDetails: React.FC = () => {
                                 </div>
 
                                 {/* Comments List */}
-                                <div className="space-y-8">
+                                <div className="space-y-12">
                                     {comments.length === 0 ? (
                                         <div className="text-center py-12 border border-white/5 rounded-3xl bg-white/5 italic text-zinc-600 font-serif">
                                             No thoughts recorded yet. Be the first to start the ledger.
                                         </div>
                                     ) : (
-                                        <div className="space-y-6">
-                                            {/* Logic for flat list with reply labels or threaded - for now flat with reply buttons */}
-                                            {comments.map((comment) => (
-                                                <div key={comment.id} className={`group space-y-3 ${comment.parentId ? 'ml-12 border-l border-white/5 pl-6' : ''}`}>
-                                                    <div className="flex justify-between items-center">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-black uppercase tracking-widest text-white">{comment.userName}</span>
-                                                            <span className="text-[9px] text-zinc-600">•</span>
-                                                            <span className="text-[9px] text-zinc-600 uppercase tracking-widest">
-                                                                {new Date(comment.createdAt).toLocaleDateString()}
-                                                            </span>
+                                        <div className="space-y-10">
+                                            {/* Logic for threaded comments */}
+                                            {comments.filter(c => !c.parentId).map((comment) => (
+                                                <div key={comment.id} className="space-y-6">
+                                                    {/* Main Comment */}
+                                                    <div className="flex gap-6 group">
+                                                        <div className="w-10 h-10 rounded-full bg-cobalt/10 border border-cobalt/20 flex items-center justify-center text-cobalt font-bold text-xs shrink-0">
+                                                            {comment.userName.charAt(0)}
                                                         </div>
-                                                        <button 
-                                                            onClick={() => {
-                                                                setReplyTo(comment.id);
-                                                                document.querySelector('textarea')?.focus();
-                                                            }}
-                                                            className="text-[9px] font-black uppercase tracking-widest text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-cobalt transition-all"
-                                                        >
-                                                            Reply
-                                                        </button>
+                                                        <div className="flex-1 space-y-3">
+                                                            <div className="flex justify-between items-center">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[10px] font-black uppercase tracking-widest text-white">{comment.userName}</span>
+                                                                    <span className="text-[9px] text-zinc-600">•</span>
+                                                                    <span className="text-[9px] text-zinc-600 uppercase tracking-widest">
+                                                                        {new Date(comment.createdAt).toLocaleDateString()}
+                                                                    </span>
+                                                                </div>
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        setReplyTo(comment.id);
+                                                                        document.querySelector('textarea')?.focus();
+                                                                    }}
+                                                                    className="text-[9px] font-black uppercase tracking-widest text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-cobalt transition-all"
+                                                                >
+                                                                    Reply
+                                                                </button>
+                                                            </div>
+                                                            <p className="text-sm font-serif text-zinc-400 leading-relaxed italic">
+                                                                "{comment.text}"
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <p className="text-sm font-serif text-zinc-400 leading-relaxed italic">
-                                                        "{comment.text}"
-                                                    </p>
+
+                                                    {/* Replies */}
+                                                    {comments.filter(r => r.parentId === comment.id).map(reply => (
+                                                        <div key={reply.id} className="ml-16 flex gap-6 group border-l border-white/5 pl-6">
+                                                            <div className="w-8 h-8 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-zinc-500 font-bold text-[10px] shrink-0">
+                                                                {reply.userName.charAt(0)}
+                                                            </div>
+                                                            <div className="flex-1 space-y-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{reply.userName}</span>
+                                                                    <span className="text-[9px] text-zinc-600">•</span>
+                                                                    <span className="text-[9px] text-zinc-600 uppercase tracking-widest">
+                                                                        {new Date(reply.createdAt).toLocaleDateString()}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-xs font-serif text-zinc-500 leading-relaxed italic">
+                                                                    "{reply.text}"
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             ))}
                                         </div>

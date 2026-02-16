@@ -11,7 +11,7 @@ interface NotificationCenterProps {
 }
 
 const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose }) => {
-    const { notifications, markAsRead } = useStore();
+    const { notifications, markAsRead, markAllAsRead, userProfile } = useStore();
     const navigate = useNavigate();
 
     if (!isOpen) return null;
@@ -100,7 +100,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
             {notifications.length > 0 && (
                 <div className="p-4 bg-zinc-900/50 border-t border-white/5 text-center">
                     <button 
-                        onClick={() => {/* Mark all as read logic */}}
+                        onClick={() => userProfile?.id && markAllAsRead(userProfile.id)}
                         className="text-[9px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
                     >
                         Archive All Notifications

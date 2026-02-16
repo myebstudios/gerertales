@@ -478,6 +478,49 @@ export const supabaseService = {
     if (error) throw error;
   },
 
+  subscribeToNotifications(userId: string, onNewNotification: (notification: Notification) => void) {
+    return supabase
+      .channel('new_notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_id=eq.${userId}`
+        },
+        async (payload) => {
+          // Fetch the full record with joins (actor and story title)
+          const { data, error } = await supabase
+            .from('notifications')
+            .select(`
+              *,
+              actor:profiles!notifications_actor_id_fkey(name, avatar_url),
+              stories(title)
+            `)
+            .eq('id', payload.new.id)
+            .single();
+
+          if (!error && data) {
+            onNewNotification({
+              id: data.id,
+              recipientId: data.recipient_id,
+              actorId: data.actor_id,
+              actorName: data.actor?.name,
+              actorAvatar: data.actor?.avatar_url,
+              type: data.type,
+              storyId: data.story_id,
+              storyTitle: data.stories?.title,
+              commentId: data.comment_id,
+              isRead: data.is_read,
+              createdAt: new Date(data.created_at).getTime()
+            });
+          }
+        }
+      )
+      .subscribe();
+  },
+
   async notifyStoryUpdate(userId: string, storyId: string) {
     // Notify all users who have this story in their library
     const { data: saves, error: savesError } = await supabase
