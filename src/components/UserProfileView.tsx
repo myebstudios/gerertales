@@ -4,167 +4,170 @@ import { UserProfile, Story } from '../types';
 import { User } from '@supabase/supabase-js';
 
 interface UserProfileViewProps {
-  profile: UserProfile;
-  stories: Story[];
-  onUpdateProfile: (profile: UserProfile) => void;
-  user: User | null;
-  onLogout: () => void;
+    profile: UserProfile;
+    stories: Story[];
+    onUpdateProfile: (profile: UserProfile) => void;
+    user: User | null;
+    onLogout: () => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({ profile, stories, onUpdateProfile, user, onLogout }) => {
-  const [name, setName] = useState(profile.name);
-  const [bio, setBio] = useState(profile.bio);
-  const [isEditing, setIsEditing] = useState(false);
+    const [name, setName] = useState(profile.name);
+    const [bio, setBio] = useState(profile.bio);
+    const [isEditing, setIsEditing] = useState(false);
 
-  // Stats Calculation
-  const totalStories = stories.length;
-  const totalChapters = stories.reduce((acc, story) => acc + story.toc.length, 0);
-  const writtenChapters = stories.reduce((acc, story) => 
-    acc + story.toc.filter(c => c.content.trim().length > 50).length, 0
-  );
-  
-  // Rough word count estimation
-  const totalWords = stories.reduce((acc, story) => 
-    acc + story.toc.reduce((cAcc, c) => cAcc + (c.content.trim().split(/\s+/).length || 0), 0), 0
-  );
+    // Stats Calculation
+    const totalStories = stories.length;
+    const totalChapters = stories.reduce((acc: number, story: Story) => acc + story.toc.length, 0);
+    const writtenChapters = stories.reduce((acc: number, story: Story) =>
+        acc + story.toc.filter((c: any) => c.content.trim().length > 50).length, 0
+    );
 
-  const handleSave = () => {
-    onUpdateProfile({
-      ...profile,
-      name,
-      bio,
-    });
-    setIsEditing(false);
-  };
+    // Rough word count estimation
+    const totalWords = stories.reduce((acc: number, story: Story) =>
+        acc + story.toc.reduce((cAcc: number, c: any) => cAcc + (c.content.trim().split(/\s+/).length || 0), 0), 0
+    );
 
-  return (
-    <div className="flex-1 h-full bg-dark-bg p-8 md:p-12 overflow-y-auto animate-in fade-in duration-500">
-      <div className="max-w-4xl mx-auto space-y-12">
-        
-        {/* Header Section */}
-        <div className="flex items-start justify-between border-b border-dark-border pb-8">
-            <div className="flex items-center gap-6">
-                {profile.avatarUrl ? (
-                    <img 
-                        src={profile.avatarUrl} 
-                        alt={profile.name}
-                        className="w-24 h-24 rounded-full object-cover shadow-2xl border-2 border-cobalt/20"
-                    />
-                ) : (
-                    <div 
-                        className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-serif text-white shadow-2xl"
-                        style={{ backgroundColor: profile.avatarColor }}
-                    >
-                        {name.charAt(0).toUpperCase()}
-                    </div>
-                )}
-                <div>
-                    {isEditing ? (
-                        <div className="space-y-3">
-                            <input 
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                                className="bg-transparent border-b border-cobalt text-3xl font-serif text-text-main focus:outline-none w-full"
-                                placeholder="Your Name"
+    const handleSave = () => {
+        onUpdateProfile({
+            ...profile,
+            name,
+            bio,
+        });
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="flex-1 h-full bg-dark-bg p-8 md:p-12 overflow-y-auto animate-in fade-in duration-500">
+            <div className="max-w-4xl mx-auto space-y-12">
+
+                {/* Header Section */}
+                <div className="flex items-start justify-between border-b border-dark-border pb-8">
+                    <div className="flex items-center gap-6">
+                        {profile.avatarUrl ? (
+                            <img
+                                src={profile.avatarUrl}
+                                alt={profile.name}
+                                className="w-24 h-24 rounded-full object-cover shadow-2xl border-2 border-cobalt/20"
                             />
-                            <input 
-                                value={bio}
-                                onChange={(e) => setBio(e.target.value)}
-                                className="bg-transparent border-b border-zinc-700 text-sm font-sans text-zinc-400 focus:outline-none focus:border-cobalt w-full"
-                                placeholder="A short bio..."
-                            />
-                        </div>
-                    ) : (
-                        <div>
-                            <h1 className="text-4xl font-serif text-text-main mb-2">{profile.name}</h1>
-                            <p className="text-zinc-400 font-sans italic">{profile.bio}</p>
-                            <div className="flex flex-wrap gap-4 mt-4">
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                                    </svg>
-                                    {user?.email}
-                                </p>
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
-                                    </svg>
-                                    Joined {new Date(profile.joinedDate).toLocaleDateString()}
-                                </p>
-                                <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3 text-cobalt">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
-                                    </svg>
-                                    {profile.credits} Credits Remaining
-                                </p>
+                        ) : (
+                            <div
+                                className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-serif text-white shadow-2xl"
+                                style={{ backgroundColor: profile.avatarColor }}
+                            >
+                                {name.charAt(0).toUpperCase()}
                             </div>
+                        )}
+                        <div>
+                            {isEditing ? (
+                                <div className="space-y-3">
+                                    <input
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        onFocus={(e) => e.target.select()}
+                                        autoFocus
+                                        className="bg-transparent border-b border-cobalt text-3xl font-serif text-text-main focus:outline-none w-full"
+                                        placeholder="Your Name"
+                                    />
+                                    <input
+                                        value={bio}
+                                        onChange={(e) => setBio(e.target.value)}
+                                        onFocus={(e) => e.target.select()}
+                                        className="bg-transparent border-b border-zinc-700 text-sm font-sans text-zinc-400 focus:outline-none focus:border-cobalt w-full"
+                                        placeholder="A short bio..."
+                                    />
+                                </div>
+                            ) : (
+                                <div>
+                                    <h1 className="text-4xl font-serif text-text-main mb-2">{profile.name}</h1>
+                                    <p className="text-zinc-400 font-sans italic">{profile.bio}</p>
+                                    <div className="flex flex-wrap gap-4 mt-4">
+                                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                                            </svg>
+                                            {user?.email}
+                                        </p>
+                                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
+                                            </svg>
+                                            Joined {new Date(profile.joinedDate).toLocaleDateString()}
+                                        </p>
+                                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3 text-cobalt">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.91 11.672a.375.375 0 010 .656l-5.603 3.113a.375.375 0 01-.557-.328V8.887c0-.286.307-.466.557-.327l5.603 3.112z" />
+                                            </svg>
+                                            {profile.credits} Credits Remaining
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    )}
+                    </div>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                            className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all
+                        ${isEditing
+                                    ? 'bg-cobalt text-white hover:bg-blue-500 shadow-lg shadow-cobalt/20'
+                                    : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-dark-border'}`}
+                        >
+                            {isEditing ? 'Save Profile' : 'Edit Profile'}
+                        </button>
+                        {user && (
+                            <button
+                                onClick={onLogout}
+                                className="px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest bg-red-900/20 text-red-500 border border-red-900/30 hover:bg-red-900/30 transition-all"
+                            >
+                                Logout
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Stats Grid */}
+                <div>
+                    <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-6">Career Statistics</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <StatCard label="Stories Created" value={totalStories} icon={
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                            </svg>
+                        } />
+                        <StatCard label="Chapters Drafted" value={writtenChapters} subValue={`/ ${totalChapters} planned`} icon={
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                        } />
+                        <StatCard label="Total Words" value={totalWords.toLocaleString()} icon={
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+                            </svg>
+                        } />
+                        <StatCard label="Writing Streak" value={"1 Day"} icon={
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.047 8.287 8.287 0 009 9.601a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.468 5.99 5.99 0 00-1.925 3.547 5.975 5.975 0 01-2.133-1.001A3.75 3.75 0 0012 18z" />
+                            </svg>
+                        } />
+                    </div>
+                </div>
+
+                {/* Recent Activity Placeholder - Could be actual logs later */}
+                <div className="bg-dark-surface border border-dark-border rounded-xl p-6 opacity-50 pointer-events-none grayscale">
+                    <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">Achievements (Coming Soon)</h3>
+                    <div className="flex gap-4">
+                        <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700" />
+                        <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700" />
+                        <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700" />
+                    </div>
                 </div>
             </div>
-            
-            <div className="flex gap-3">
-                <button
-                    onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-                    className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest transition-all
-                        ${isEditing 
-                            ? 'bg-cobalt text-white hover:bg-blue-500 shadow-lg shadow-cobalt/20' 
-                            : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 border border-dark-border'}`}
-                >
-                    {isEditing ? 'Save Profile' : 'Edit Profile'}
-                </button>
-                {user && (
-                    <button
-                        onClick={onLogout}
-                        className="px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest bg-red-900/20 text-red-500 border border-red-900/30 hover:bg-red-900/30 transition-all"
-                    >
-                        Logout
-                    </button>
-                )}
-            </div>
         </div>
-
-        {/* Stats Grid */}
-        <div>
-            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-6">Career Statistics</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <StatCard label="Stories Created" value={totalStories} icon={
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                    </svg>
-                } />
-                <StatCard label="Chapters Drafted" value={writtenChapters} subValue={`/ ${totalChapters} planned`} icon={
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                    </svg>
-                } />
-                <StatCard label="Total Words" value={totalWords.toLocaleString()} icon={
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-                    </svg>
-                } />
-                <StatCard label="Writing Streak" value={"1 Day"} icon={
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.047 8.287 8.287 0 009 9.601a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.468 5.99 5.99 0 00-1.925 3.547 5.975 5.975 0 01-2.133-1.001A3.75 3.75 0 0012 18z" />
-                    </svg>
-                } />
-            </div>
-        </div>
-
-        {/* Recent Activity Placeholder - Could be actual logs later */}
-        <div className="bg-dark-surface border border-dark-border rounded-xl p-6 opacity-50 pointer-events-none grayscale">
-            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-4">Achievements (Coming Soon)</h3>
-            <div className="flex gap-4">
-                <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700" />
-                <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700" />
-                <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700" />
-            </div>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 const StatCard = ({ label, value, subValue, icon }: { label: string, value: string | number, subValue?: string, icon: React.ReactNode }) => (

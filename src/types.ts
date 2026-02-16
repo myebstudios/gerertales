@@ -26,6 +26,7 @@ export interface Story {
   id: string;
   ownerId?: string;
   ownerName?: string;
+  ownerAvatar?: string;
   title: string;
   spark: string;
   tone: string;

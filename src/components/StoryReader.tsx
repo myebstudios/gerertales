@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Story, Chapter, TTSProvider } from '../types';
 import { supabaseService } from '../services/supabaseService';
+import { supabase } from '../services/supabaseClient';
 import * as VoiceService from '../services/voiceService';
 import { VOICE_LISTS } from '../services/voiceService';
 import { useNotify } from '../services/NotificationContext';
@@ -12,11 +13,11 @@ const StoryReader: React.FC = () => {
     const navigate = useNavigate();
     const { notify } = useNotify();
     const { deductCredits, userProfile } = useStore();
-    
+
     const [story, setStory] = useState<Story | null>(null);
     const [currentChapterIdx, setCurrentChapterIdx] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
-    
+
     // Audio State
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
@@ -36,10 +37,32 @@ const StoryReader: React.FC = () => {
 
     useEffect(() => {
         if (storyId) {
-            supabaseService.getStoryById(storyId).then(res => {
-                if (res) setStory(res);
-                setIsLoading(false);
-            }).catch(() => setIsLoading(false));
+            // CRITICAL FIX: Check localStorage first for guest stories
+            const loadStory = async () => {
+                try {
+                    // Try localStorage first (for guest users)
+                    const savedStories = localStorage.getItem('gerertales_stories');
+                    if (savedStories) {
+                        const stories = JSON.parse(savedStories);
+                        const localStory = stories.find((s: Story) => s.id === storyId);
+                        if (localStory) {
+                            setStory(localStory);
+                            setIsLoading(false);
+                            return;
+                        }
+                    }
+
+                    // Fallback to Supabase for authenticated users
+                    const cloudStory = await supabaseService.getStoryById(storyId);
+                    if (cloudStory) setStory(cloudStory);
+                    setIsLoading(false);
+                } catch (e) {
+                    console.error('Failed to load story:', e);
+                    setIsLoading(false);
+                }
+            };
+
+            loadStory();
         }
     }, [storyId]);
 
@@ -56,7 +79,7 @@ const StoryReader: React.FC = () => {
             const loadVoices = () => setBrowserVoices(synthesisRef.current.getVoices());
             loadVoices();
             if (synthesisRef.current.onvoiceschanged !== undefined) synthesisRef.current.onvoiceschanged = loadVoices;
-        } catch (e) {}
+        } catch (e) { }
     }, []);
 
     const currentChapter = story?.toc[currentChapterIdx];
@@ -68,8 +91,8 @@ const StoryReader: React.FC = () => {
     }, [currentChapterIdx]);
 
     const stopAudio = () => {
-        if (audioSourceRef.current) { 
-            try { audioSourceRef.current.stop(); } catch (e) {} 
+        if (audioSourceRef.current) {
+            try { audioSourceRef.current.stop(); } catch (e) { }
             audioSourceRef.current.disconnect();
         }
         if (audioContextRef.current) audioContextRef.current.suspend();
@@ -121,9 +144,9 @@ const StoryReader: React.FC = () => {
         if (voice) utterance.voice = voice;
         utterance.onstart = () => { setIsPlaying(true); setPlaybackProgress(0); };
         utterance.onend = () => { setIsPlaying(false); setPlaybackProgress(100); };
-        
+
         const words = currentChapter.content.split(' ').length;
-        const estimatedDuration = words / 2.5; 
+        const estimatedDuration = words / 2.5;
         let elapsed = 0;
         if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = window.setInterval(() => {
@@ -152,10 +175,10 @@ const StoryReader: React.FC = () => {
 
     const playBuffer = (buffer: AudioBuffer, offset: number = 0) => {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        let ctx = audioContextRef.current || new AudioContextClass({sampleRate: 24000});
+        let ctx = audioContextRef.current || new AudioContextClass({ sampleRate: 24000 });
         audioContextRef.current = ctx;
         if (ctx.state === 'suspended') ctx.resume();
-        if (audioSourceRef.current) { try { audioSourceRef.current.stop(); } catch (e) {} audioSourceRef.current.disconnect(); }
+        if (audioSourceRef.current) { try { audioSourceRef.current.stop(); } catch (e) { } audioSourceRef.current.disconnect(); }
 
         const source = ctx.createBufferSource();
         source.buffer = buffer;
@@ -191,18 +214,18 @@ const StoryReader: React.FC = () => {
     const getVoiceOptions = () => {
         if (ttsProvider === 'browser') return browserVoices.map(v => v.name).sort();
         const settings = JSON.parse(localStorage.getItem('gerertales_settings') || '{}');
-        if (settings.ttsModel?.includes('eleven')) return VOICE_LISTS.elevenlabs.map((v:any) => v.name);
-        if (settings.ttsModel?.startsWith('tts')) return VOICE_LISTS.openai.map((v:any) => v.name);
-        return VOICE_LISTS.gemini.map((v:any) => v.name);
+        if (settings.ttsModel?.includes('eleven')) return VOICE_LISTS.elevenlabs.map((v: any) => v.name);
+        if (settings.ttsModel?.startsWith('tts')) return VOICE_LISTS.openai.map((v: any) => v.name);
+        return VOICE_LISTS.gemini.map((v: any) => v.name);
     };
 
     if (isLoading) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted animate-pulse">Opening the Tome...</div>;
     if (!story) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted">Tale not found.</div>;
 
     return (
-        <div className="flex flex-col h-screen bg-dark-bg text-text-main font-serif selection:bg-cobalt selection:text-white">
+        <div className="flex flex-col min-h-full bg-dark-bg text-text-main font-serif selection:bg-cobalt selection:text-white">
             {/* Minimal Header */}
-            <nav className="shrink-0 w-full z-50 px-8 py-6 flex items-center justify-between backdrop-blur-xl bg-dark-bg/60 border-b border-white/5">
+            <nav className="shrink-0 w-full z-50 px-8 py-6 flex items-center justify-between backdrop-blur-xl bg-dark-bg/60 border-b border-white/5 sticky top-0">
                 <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                     Exit
@@ -214,7 +237,7 @@ const StoryReader: React.FC = () => {
                 <div className="flex items-center gap-4">
                     {/* Voice Engine Toggle */}
                     <div className="relative">
-                        <button 
+                        <button
                             onClick={() => setShowAudioSettings(!showAudioSettings)}
                             className={`p-2 rounded-xl transition-all ${showAudioSettings ? 'bg-cobalt/20 text-cobalt' : 'text-zinc-500 hover:text-white'}`}
                         >
@@ -232,7 +255,7 @@ const StoryReader: React.FC = () => {
                                     </div>
                                     <div className="space-y-3">
                                         <label className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Select Voice</label>
-                                        <select 
+                                        <select
                                             value={selectedVoice}
                                             onChange={(e) => { setSelectedVoice(e.target.value); stopAudio(); }}
                                             className="w-full bg-zinc-900 border border-dark-border rounded-xl p-3 text-xs text-white outline-none"
@@ -247,8 +270,8 @@ const StoryReader: React.FC = () => {
                 </div>
             </nav>
 
-            <main className="flex-1 overflow-y-auto pt-20 pb-40 px-8">
-                <div className="max-w-3xl mx-auto space-y-16">
+            <main className="flex-1 pt-20 pb-40 px-8">
+                <div className="max-w-6xl mx-auto space-y-16">
                     {/* Chapter Banner */}
                     {currentChapter?.bannerImage && (
                         <div className="w-full aspect-video rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl bg-zinc-900">
@@ -261,7 +284,7 @@ const StoryReader: React.FC = () => {
                             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cobalt">Chapter {currentChapter?.chapter}</span>
                             <h2 className="text-4xl md:text-5xl lg:text-6xl font-medium tracking-tight text-white leading-tight">{currentChapter?.title}</h2>
                         </div>
-                        
+
                         <div className="prose prose-invert prose-lg max-w-none">
                             {currentChapter?.content ? (
                                 currentChapter.content.split('\n\n').map((para, i) => (
@@ -277,21 +300,21 @@ const StoryReader: React.FC = () => {
 
                     {/* Footer Nav */}
                     <div className="pt-24 border-t border-white/5 flex items-center justify-between">
-                        <button 
-                            onClick={handlePrev} 
+                        <button
+                            onClick={handlePrev}
                             disabled={currentChapterIdx === 0}
                             className="px-8 py-4 rounded-2xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-zinc-400 hover:bg-white/10 hover:text-white transition-all disabled:opacity-0"
                         >
                             Previous
                         </button>
-                        
+
                         {currentChapterIdx === story.toc.length - 1 ? (
                             <div className="text-center space-y-2">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-cobalt">Fin.</p>
                                 <p className="text-xs text-zinc-600 font-sans italic">The end of this narrative arc.</p>
                             </div>
                         ) : (
-                            <button 
+                            <button
                                 onClick={handleNext}
                                 className="px-10 py-4 rounded-2xl bg-white text-black text-[10px] font-black uppercase tracking-widest hover:bg-zinc-200 transition-all shadow-xl shadow-white/10"
                             >
@@ -305,8 +328,8 @@ const StoryReader: React.FC = () => {
             {/* Sticky Audio Control Bar */}
             <div className="fixed bottom-12 left-1/2 -translate-x-1/2 w-full max-w-lg px-8 z-50">
                 <div className="bg-dark-surface/80 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 flex items-center gap-6 shadow-2xl">
-                    <button 
-                        onClick={handlePlayPause} 
+                    <button
+                        onClick={handlePlayPause}
                         disabled={isLoadingAudio}
                         className="w-12 h-12 rounded-full bg-cobalt text-white flex items-center justify-center hover:bg-blue-500 transition-all active:scale-95 shrink-0 shadow-lg shadow-cobalt/20"
                     >
@@ -323,7 +346,7 @@ const StoryReader: React.FC = () => {
                         </div>
                     </div>
 
-                    <button 
+                    <button
                         onClick={stopAudio}
                         className="p-2 text-zinc-500 hover:text-rose-400 transition-colors"
                     >

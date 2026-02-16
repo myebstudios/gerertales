@@ -6,9 +6,10 @@ export const supabaseService = {
   // Auth
   async signInWithGoogle() {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const redirectUrl = isLocalhost 
-        ? window.location.origin + '/library'
-        : 'https://gerertales-ai.netlify.app/library';
+    const productionUrl = import.meta.env.VITE_APP_URL || 'https://gerertales-ai.netlify.app';
+    const redirectUrl = isLocalhost
+      ? window.location.origin + '/library'
+      : productionUrl + '/library';
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -22,15 +23,15 @@ export const supabaseService = {
 
   async signInWithEmail(email: string, password: string) {
     return await supabase.auth.signInWithPassword({
-        email,
-        password,
+      email,
+      password,
     });
   },
 
   async signUpWithEmail(email: string, password: string) {
     return await supabase.auth.signUp({
-        email,
-        password,
+      email,
+      password,
     });
   },
 
@@ -86,12 +87,10 @@ export const supabaseService = {
     if (profile.stripeCustomerId !== undefined) updateData.stripe_customer_id = profile.stripeCustomerId;
     if (profile.subscriptionStatus !== undefined) updateData.subscription_status = profile.subscriptionStatus;
     if (profile.subscriptionTier !== undefined) updateData.subscription_tier = profile.subscriptionTier;
-    
-    // Safety check: is_admin and is_super_admin should ideally not be updated via this common method 
-    // from a regular user's session, but for now we keep the logic if it's explicitly passed.
-    if (profile.isAdmin !== undefined) updateData.is_admin = profile.isAdmin;
-    if (profile.isSuperAdmin !== undefined) updateData.is_super_admin = profile.isSuperAdmin;
-    if (profile.role !== undefined) updateData.role = profile.role;
+
+    // SECURITY: Admin privileges CANNOT be updated from client-side
+    // These must be updated via Supabase admin panel or server-side functions only
+    // Removed: isAdmin, isSuperAdmin, role updates
 
     const { error } = await supabase
       .from('profiles')
@@ -126,25 +125,25 @@ export const supabaseService = {
   },
 
   async logAudit(userId: string | undefined, type: string, message: string, metadata: any = {}) {
-      const { error } = await supabase
-        .from('audit_logs')
-        .insert({
-            user_id: userId,
-            type,
-            message,
-            metadata
-        });
-      if (error) console.error("Audit log failed:", error);
+    const { error } = await supabase
+      .from('audit_logs')
+      .insert({
+        user_id: userId,
+        type,
+        message,
+        metadata
+      });
+    if (error) console.error("Audit log failed:", error);
   },
 
   async getAuditLogs(): Promise<any[]> {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200); // Increased limit for better visibility
-      if (error) throw error;
-      return data;
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(200); // Increased limit for better visibility
+    if (error) throw error;
+    return data;
   },
 
   // System Config
@@ -154,7 +153,7 @@ export const supabaseService = {
       .select('config')
       .eq('id', 'global_settings')
       .single();
-    
+
     if (error) {
       console.error("Error fetching system config:", error);
       return null;
@@ -172,16 +171,16 @@ export const supabaseService = {
         updated_at: new Date().toISOString(),
         updated_by: user?.id
       });
-    
+
     if (error) throw error;
   },
 
   async deductCreditsSecurely(amount: number, feature: string): Promise<{ success: boolean, newBalance?: number, error?: string }> {
-      const { data, error } = await supabase.functions.invoke('deduct-credits', {
-          body: { amount, feature }
-      });
-      if (error) return { success: false, error: error.message };
-      return data;
+    const { data, error } = await supabase.functions.invoke('deduct-credits', {
+      body: { amount, feature }
+    });
+    if (error) return { success: false, error: error.message };
+    return data;
   },
 
   // Stories
@@ -202,7 +201,7 @@ export const supabaseService = {
       .from('stories')
       .select(`
         *,
-        profiles(name)
+        profiles(name, avatar_url)
       `)
       .order('last_modified', { ascending: false });
 
@@ -213,23 +212,23 @@ export const supabaseService = {
 
   async saveStory(userId: string, story: Story) {
     if (!userId) throw new Error("User ID is required to save a story.");
-    
+
     const storyData = {
-        id: story.id,
-        owner_id: userId,
-        title: story.title,
-        spark: story.spark,
-        tone: story.tone,
-        format: story.format,
-        active_chapter_index: story.activeChapterIndex,
-        characters: story.characters,
-        locations: story.locations,
-        toc: story.toc,
-        last_modified: new Date(story.lastModified).toISOString(),
-        cover_image: story.coverImage,
-        collection: story.collection,
-        is_public: story.isPublic || false,
-        published_at: story.publishedAt ? new Date(story.publishedAt).toISOString() : null
+      id: story.id,
+      owner_id: userId,
+      title: story.title,
+      spark: story.spark,
+      tone: story.tone,
+      format: story.format,
+      active_chapter_index: story.activeChapterIndex,
+      characters: story.characters,
+      locations: story.locations,
+      toc: story.toc,
+      last_modified: new Date(story.lastModified).toISOString(),
+      cover_image: story.coverImage,
+      collection: story.collection,
+      is_public: story.isPublic || false,
+      published_at: story.publishedAt ? new Date(story.publishedAt).toISOString() : null
     };
 
     console.log("Saving story to Supabase:", storyData.id);
@@ -239,8 +238,8 @@ export const supabaseService = {
       .upsert(storyData);
 
     if (error) {
-        console.error("Supabase Save Error:", error);
-        throw error;
+      console.error("Supabase Save Error:", error);
+      throw error;
     }
 
     // Log the save activity if it's a major update
@@ -261,22 +260,25 @@ export const supabaseService = {
   async getPublicStories(): Promise<Story[]> {
     console.log("Fetching public stories...");
     try {
-        const { data, error } = await supabase
-          .from('stories')
-          .select('*')
-          .eq('is_public', true)
-          .order('published_at', { ascending: false })
-          .limit(20);
+      const { data, error } = await supabase
+        .from('stories')
+        .select(`
+          *,
+          profiles(name, avatar_url)
+        `)
+        .eq('is_public', true)
+        .order('published_at', { ascending: false })
+        .limit(20);
 
-        if (error) {
-            console.error("Supabase query error:", error);
-            throw error;
-        }
-        
-        return data.map(s => this._mapStory(s));
+      if (error) {
+        console.error("Supabase query error:", error);
+        throw error;
+      }
+
+      return data.map(s => this._mapStory(s));
     } catch (e) {
-        console.error("Public fetch failed:", e);
-        return [];
+      console.error("Public fetch failed:", e);
+      return [];
     }
   },
 
@@ -288,7 +290,7 @@ export const supabaseService = {
         story_likes(count),
         story_comments(count),
         story_ratings(rating),
-        profiles(name)
+        profiles(name, avatar_url)
       `)
       .eq('id', storyId)
       .single();
@@ -297,8 +299,8 @@ export const supabaseService = {
 
     const mapped = this._mapStory(data);
     const ratings = data.story_ratings || [];
-    const avg = ratings.length > 0 
-      ? ratings.reduce((acc: number, r: any) => acc + r.rating, 0) / ratings.length 
+    const avg = ratings.length > 0
+      ? ratings.reduce((acc: number, r: any) => acc + r.rating, 0) / ratings.length
       : 0;
 
     return {
@@ -314,6 +316,7 @@ export const supabaseService = {
       id: s.id,
       ownerId: s.owner_id,
       ownerName: s.profiles?.name,
+      ownerAvatar: s.profiles?.avatar_url,
       title: s.title,
       spark: s.spark,
       tone: s.tone,
@@ -333,7 +336,7 @@ export const supabaseService = {
   async likeStory(userId: string, storyId: string) {
     const { error } = await supabase
       .from('story_likes')
-      .upsert({ user_id: userId, story_id: story_id });
+      .upsert({ user_id: userId, story_id: storyId });
     if (error) throw error;
     this.logAudit(userId, 'social', `Liked story ID: ${storyId}`);
   },
@@ -345,7 +348,7 @@ export const supabaseService = {
       .eq('user_id', userId)
       .eq('story_id', storyId)
       .maybeSingle();
-    
+
     if (error) return false;
     return !!data;
   },
@@ -426,37 +429,37 @@ export const supabaseService = {
     let blob: Blob;
 
     if (base64Data.startsWith('http')) {
-        try {
-            let fetchUrl = base64Data;
-            const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-            
-            if (isProduction && base64Data.includes('imgen.x.ai')) {
-                fetchUrl = base64Data.replace('https://imgen.x.ai', '/x-img');
-            }
+      try {
+        let fetchUrl = base64Data;
+        const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 
-            const response = await fetch(fetchUrl);
-            if (!response.ok) throw new Error(`Failed to fetch image from URL: ${response.status}`);
-            blob = await response.blob();
-        } catch (e) {
-            // Fallback for CORS: if it's a URL we can't fetch, just return it
-            console.warn("CORS fetch failed for upload, returning original URL", e);
-            return base64Data;
+        if (isProduction && base64Data.includes('imgen.x.ai')) {
+          fetchUrl = base64Data.replace('https://imgen.x.ai', '/x-img');
         }
+
+        const response = await fetch(fetchUrl);
+        if (!response.ok) throw new Error(`Failed to fetch image from URL: ${response.status}`);
+        blob = await response.blob();
+      } catch (e) {
+        // Fallback for CORS: if it's a URL we can't fetch, just return it
+        console.warn("CORS fetch failed for upload, returning original URL", e);
+        return base64Data;
+      }
     } else {
-        const base64Content = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
-        const cleaned = base64Content.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
-        
-        try {
-            const byteCharacters = atob(cleaned);
-            const byteNumbers = new Uint8Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            blob = new Blob([byteNumbers], { type: 'image/png' });
-        } catch (e) {
-            console.error("atob failure. Data length:", cleaned.length, "Preview:", cleaned.slice(0, 50));
-            throw e;
+      const base64Content = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+      const cleaned = base64Content.replace(/\s/g, '').replace(/-/g, '+').replace(/_/g, '/');
+
+      try {
+        const byteCharacters = atob(cleaned);
+        const byteNumbers = new Uint8Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
+        blob = new Blob([byteNumbers], { type: 'image/png' });
+      } catch (e) {
+        console.error("atob failure. Data length:", cleaned.length, "Preview:", cleaned.slice(0, 50));
+        throw e;
+      }
     }
 
     const filePath = `${userId}/${Date.now()}_${fileName}`;
@@ -481,27 +484,27 @@ export const supabaseService = {
     // Migrate Profile
     const localProfile = localStorage.getItem('gerertales_profile');
     if (localProfile) {
-        try {
-            const profile = JSON.parse(localProfile) as UserProfile;
-            await this.updateProfile(userId, profile);
-            localStorage.removeItem('gerertales_profile');
-        } catch (e) {
-            console.error("Failed to migrate profile", e);
-        }
+      try {
+        const profile = JSON.parse(localProfile) as UserProfile;
+        await this.updateProfile(userId, profile);
+        localStorage.removeItem('gerertales_profile');
+      } catch (e) {
+        console.error("Failed to migrate profile", e);
+      }
     }
 
     // Migrate Stories
     const localStories = localStorage.getItem('gerertales_stories');
     if (localStories) {
-        try {
-            const stories = JSON.parse(localStories) as Story[];
-            for (const story of stories) {
-                await this.saveStory(userId, story);
-            }
-            localStorage.removeItem('gerertales_stories');
-        } catch (e) {
-            console.error("Failed to migrate stories", e);
+      try {
+        const stories = JSON.parse(localStories) as Story[];
+        for (const story of stories) {
+          await this.saveStory(userId, story);
         }
+        localStorage.removeItem('gerertales_stories');
+      } catch (e) {
+        console.error("Failed to migrate stories", e);
+      }
     }
   }
 };

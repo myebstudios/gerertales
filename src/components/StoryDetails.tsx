@@ -11,18 +11,31 @@ const StoryDetails: React.FC = () => {
     const navigate = useNavigate();
     const { notify } = useNotify();
     const { userProfile, deductCredits, setStories, stories } = useStore();
-    
+
     const [story, setStory] = useState<Story | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<'info' | 'cast' | 'chapters'>('info');
-    
+
     // UI State for Image Gen
     const [isGeneratingCover, setIsGeneratingCover] = useState(false);
     const [generatingChapterIdx, setGeneratingChapterIdx] = useState<number | null>(null);
 
     useEffect(() => {
         if (storyId) {
+            // Check local storage first (fix for local/guest stories cover image)
+            const savedStories = localStorage.getItem('gerertales_stories');
+            if (savedStories) {
+                const stories = JSON.parse(savedStories);
+                const localStory = stories.find((s: Story) => s.id === storyId);
+                if (localStory) {
+                    setStory(localStory);
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
+            // Fallback to Supabase
             supabaseService.getStoryById(storyId).then(res => {
                 if (res) setStory(res);
                 setIsLoading(false);
@@ -95,7 +108,7 @@ const StoryDetails: React.FC = () => {
         try {
             await supabaseService.saveStory(userProfile.id, updated);
             notify(newState ? "Tale published to the library!" : "Tale moved to drafts.");
-        } catch (e) {}
+        } catch (e) { }
     };
 
     if (isLoading) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted animate-pulse">Consulting the Ledger...</div>;
@@ -113,7 +126,7 @@ const StoryDetails: React.FC = () => {
                 ) : (
                     <div className="w-full h-full bg-zinc-900" />
                 )}
-                
+
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center px-8">
                     <div className="max-w-4xl space-y-6">
                         <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cobalt px-4 py-1.5 rounded-full border border-cobalt/30 bg-cobalt/5">
@@ -124,8 +137,8 @@ const StoryDetails: React.FC = () => {
                     </div>
                 </div>
 
-                <button 
-                    onClick={() => navigate(-1)} 
+                <button
+                    onClick={() => navigate(-1)}
                     className="absolute top-8 left-8 z-30 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white transition-all"
                 >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
@@ -135,7 +148,7 @@ const StoryDetails: React.FC = () => {
 
             <main className="max-w-7xl mx-auto px-8 -mt-12 relative z-30">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-                    
+
                     {/* Sidebar Actions */}
                     <div className="lg:col-span-4 space-y-8">
                         <div className="bg-dark-card border border-white/5 rounded-3xl p-8 shadow-2xl space-y-8 sticky top-8">
@@ -143,7 +156,7 @@ const StoryDetails: React.FC = () => {
                                 {story.coverImage ? <img src={story.coverImage} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center italic text-zinc-800">No Cover</div>}
                                 {isOwner && (
                                     <div className={`absolute inset-0 bg-black/60 transition-all flex items-center justify-center ${isGeneratingCover ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                                        <button 
+                                        <button
                                             onClick={handleRegenerateCover}
                                             disabled={isGeneratingCover}
                                             className="text-[10px] font-black uppercase tracking-widest text-white border border-white/20 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50"
@@ -155,10 +168,10 @@ const StoryDetails: React.FC = () => {
                             </div>
 
                             <div className="space-y-3">
-                                <button onClick={() => navigate(`/writing/${story.id}`)} className="w-full py-4 rounded-2xl bg-white text-black text-[11px] font-black uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all shadow-xl shadow-white/5">Continue Writing</button>
+                                {isOwner && <button onClick={() => navigate(`/writing/${story.id}`)} className="w-full py-4 rounded-2xl bg-white text-black text-[11px] font-black uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all shadow-xl shadow-white/5">Continue Writing</button>}
                                 <button onClick={() => navigate(`/read/${story.id}`)} className="w-full py-4 rounded-2xl bg-cobalt text-white text-[11px] font-black uppercase tracking-[0.2em] hover:bg-blue-500 transition-all shadow-xl shadow-cobalt/20">Enter Reading Mode</button>
                                 {isOwner && (
-                                    <button 
+                                    <button
                                         onClick={togglePublish}
                                         className={`w-full py-4 rounded-2xl border text-[11px] font-black uppercase tracking-[0.2em] transition-all 
                                         ${story.isPublic ? 'border-rose-500/30 text-rose-400 hover:bg-rose-500/5' : 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/5'}`}
@@ -186,16 +199,16 @@ const StoryDetails: React.FC = () => {
                             <div className="space-y-10 animate-in fade-in slide-in-from-right-4">
                                 <section className="space-y-4">
                                     <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600">The Story Spark</label>
-                                    <textarea readOnly={!isOwner} value={story.spark} onChange={(e) => setStory({...story, spark: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-lg font-serif italic text-zinc-300 leading-relaxed outline-none focus:border-cobalt transition-all resize-none min-h-[120px]" />
+                                    <textarea readOnly={!isOwner} value={story.spark} onChange={(e) => setStory({ ...story, spark: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-lg font-serif italic text-zinc-300 leading-relaxed outline-none focus:border-cobalt transition-all resize-none min-h-[120px]" />
                                 </section>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <section className="space-y-4">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Tale Title</label>
-                                        <input readOnly={!isOwner} value={story.title} onChange={(e) => setStory({...story, title: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-cobalt" />
+                                        <input readOnly={!isOwner} value={story.title} onChange={(e) => setStory({ ...story, title: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-cobalt" />
                                     </section>
                                     <section className="space-y-4">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Atmosphere / Tone</label>
-                                        <input readOnly={!isOwner} value={story.tone} onChange={(e) => setStory({...story, tone: e.target.value})} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-cobalt" />
+                                        <input readOnly={!isOwner} value={story.tone} onChange={(e) => setStory({ ...story, tone: e.target.value })} className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-medium outline-none focus:border-cobalt" />
                                     </section>
                                 </div>
                                 {isOwner && <button onClick={handleSave} disabled={isSaving} className="bg-zinc-800 text-white px-10 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-700 transition-all disabled:opacity-50">{isSaving ? 'Syncing...' : 'Save Metadata Changes'}</button>}
@@ -230,7 +243,7 @@ const StoryDetails: React.FC = () => {
                                             {ch.bannerImage ? <img src={ch.bannerImage} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-800 italic text-[10px]">No Banner</div>}
                                             {isOwner && (
                                                 <div className={`absolute inset-0 bg-black/60 transition-all flex items-center justify-center ${generatingChapterIdx === i ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleRegenerateBanner(i)}
                                                         disabled={generatingChapterIdx !== null}
                                                         className="text-[8px] font-black uppercase tracking-widest text-white border border-white/20 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20"

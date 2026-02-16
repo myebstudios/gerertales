@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { Story, UserProfile, Message, StoryConfig, StoryBlueprintData } from '../types';
 import { supabaseService } from './supabaseService';
+import { supabase } from './supabaseClient';
 import * as TextService from './textService';
 import * as ImageService from './imageService';
 import { User } from '@supabase/supabase-js';
@@ -12,17 +13,17 @@ interface StoryState {
   activeStoryId: string | null;
   messages: Message[];
   isAiProcessing: boolean;
-  
+
   // Actions
   setStories: (stories: Story[]) => void;
   setUserProfile: (profile: UserProfile) => void;
   setActiveStoryId: (id: string | null) => void;
   setMessages: (messages: Message[]) => void;
   setIsAiProcessing: (status: boolean) => void;
-  
+
   // Async Thunks
   loadUserContent: (user: User) => Promise<void>;
-  createStory: (user: User | null, config: StoryConfig, blueprint: StoryBlueprintData) => Promise<void>;
+  createStory: (user: User | null, config: StoryConfig, blueprint: StoryBlueprintData) => Promise<string>;
   updateStoryContent: (user: User | null, storyId: string, chapterIndex: number, content: string) => Promise<void>;
   deductCredits: (user: User | null, amount: number, feature: string) => Promise<boolean>;
 }
@@ -46,9 +47,9 @@ export const useStore = create<StoryState>((set, get) => ({
     // Fetch Global Config
     const globalConfig = await supabaseService.getSystemConfig();
     if (globalConfig) {
-        const saved = localStorage.getItem('gerertales_settings');
-        const current = saved ? JSON.parse(saved) : {};
-        localStorage.setItem('gerertales_settings', JSON.stringify({ ...globalConfig, ...current }));
+      const saved = localStorage.getItem('gerertales_settings');
+      const current = saved ? JSON.parse(saved) : {};
+      localStorage.setItem('gerertales_settings', JSON.stringify({ ...globalConfig, ...current }));
     }
     set({ userProfile: profile, stories: cloudStories });
   },
@@ -58,26 +59,26 @@ export const useStore = create<StoryState>((set, get) => ({
     if (!userProfile) return false;
 
     if (user) {
-        try {
-            // Ensure session is fresh
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) return false;
+      try {
+        // Ensure session is fresh
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return false;
 
-            const result = await supabaseService.deductCreditsSecurely(amount, feature);
-            if (result.success && result.newBalance !== undefined) {
-                set({ userProfile: { ...userProfile, credits: result.newBalance } });
-                return true;
-            }
-            return false;
-        } catch (e) {
-            return false;
+        const result = await supabaseService.deductCreditsSecurely(amount, feature);
+        if (result.success && result.newBalance !== undefined) {
+          set({ userProfile: { ...userProfile, credits: result.newBalance } });
+          return true;
         }
+        return false;
+      } catch (e) {
+        return false;
+      }
     } else {
-        const newBalance = Math.max(0, parseFloat((userProfile.credits - amount).toFixed(2)));
-        const updated = { ...userProfile, credits: newBalance };
-        set({ userProfile: updated });
-        localStorage.setItem('gerertales_profile', JSON.stringify(updated));
-        return true;
+      const newBalance = Math.max(0, parseFloat((userProfile.credits - amount).toFixed(2)));
+      const updated = { ...userProfile, credits: newBalance };
+      set({ userProfile: updated });
+      localStorage.setItem('gerertales_profile', JSON.stringify(updated));
+      return true;
     }
   },
 
@@ -99,34 +100,45 @@ export const useStore = create<StoryState>((set, get) => ({
     };
 
     // Update UI state immediately
-    set(state => ({ stories: [newStory, ...state.stories], activeStoryId: newStoryId }));
-    
+    const updatedStories = [newStory, ...get().stories];
+    set({ stories: updatedStories, activeStoryId: newStoryId });
+
+    // CRITICAL FIX: Save to localStorage for guest users
+    if (!user) {
+      localStorage.setItem('gerertales_stories', JSON.stringify(updatedStories));
+    }
+
     // Non-blocking save and cover gen
     (async () => {
-        try {
-            if (user) await supabaseService.saveStory(user.id, newStory);
-            
-            const userTier = get().userProfile?.subscriptionTier || 'free';
-            const { url, cost } = await ImageService.generateCoverImage(config.title, config.tone, config.spark, userTier);
-            
-            if (url) {
-                let finalUrl = url;
-                if (user) {
-                    const uploaded = await supabaseService.uploadImage(user.id, url, 'cover.png');
-                    if (uploaded) finalUrl = uploaded;
-                }
-                const updatedStory = { ...newStory, coverImage: finalUrl };
-                set(state => ({
-                    stories: state.stories.map(s => s.id === newStoryId ? updatedStory : s)
-                }));
-                if (user) await supabaseService.saveStory(user.id, updatedStory);
-                await get().deductCredits(user, cost, "Cover Image");
-            }
-        } catch (e) {
-            console.error("Background story init failed:", e);
+      try {
+        if (user) await supabaseService.saveStory(user.id, newStory);
+
+        const userTier = get().userProfile?.subscriptionTier || 'free';
+        const { url, cost } = await ImageService.generateCoverImage(config.title, config.tone, config.spark, userTier);
+
+        if (url) {
+          let finalUrl = url;
+          if (user) {
+            const uploaded = await supabaseService.uploadImage(user.id, url, 'cover.png');
+            if (uploaded) finalUrl = uploaded;
+          }
+          const updatedStory = { ...newStory, coverImage: finalUrl };
+          const storiesWithCover = get().stories.map(s => s.id === newStoryId ? updatedStory : s);
+          set({ stories: storiesWithCover });
+
+          // CRITICAL FIX: Save to localStorage for guest users
+          if (!user) {
+            localStorage.setItem('gerertales_stories', JSON.stringify(storiesWithCover));
+          }
+
+          if (user) await supabaseService.saveStory(user.id, updatedStory);
+          await get().deductCredits(user, cost, "Cover Image");
         }
+      } catch (e) {
+        console.error("Background story init failed:", e);
+      }
     })();
-    
+
     set({ isAiProcessing: false });
     return newStoryId;
   },
@@ -140,9 +152,13 @@ export const useStore = create<StoryState>((set, get) => ({
     updatedChapters[chapterIndex].content = content;
     const updatedStory = { ...story, toc: updatedChapters, lastModified: Date.now() };
 
-    set(state => ({
-      stories: state.stories.map(s => s.id === storyId ? updatedStory : s)
-    }));
+    const updatedStories = stories.map(s => s.id === storyId ? updatedStory : s);
+    set({ stories: updatedStories });
+
+    // CRITICAL FIX: Save to localStorage for guest users
+    if (!user) {
+      localStorage.setItem('gerertales_stories', JSON.stringify(updatedStories));
+    }
 
     if (user) await supabaseService.saveStory(user.id, updatedStory);
   }

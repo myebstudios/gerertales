@@ -34,27 +34,27 @@ const App: React.FC = () => {
   const location = useLocation();
   const { notify } = useNotify();
 
-  const { 
-    stories, setStories, 
+  const {
+    stories, setStories,
     userProfile, setUserProfile,
     activeStoryId, setActiveStoryId,
     messages, setMessages,
     isAiProcessing, setIsAiProcessing,
     createStory, updateStoryContent, deductCredits
   } = useStore();
-  
+
   const [dialog, setDialog] = useState<{
-      isOpen: boolean;
-      title: string;
-      message: string;
-      onConfirm: () => void;
-      type: 'info' | 'danger';
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: 'info' | 'danger';
   }>({
-      isOpen: false,
-      title: '',
-      message: '',
-      onConfirm: () => {},
-      type: 'info'
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+    type: 'info'
   });
 
   useEffect(() => {
@@ -73,108 +73,112 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const syncData = async () => {
-        if (user) {
-            let profile = await supabaseService.getProfile(user.id);
-            if (profile) {
-                const metadata = user.user_metadata;
-                if (metadata && (!profile.avatarUrl || profile.name === 'Guest Writer')) {
-                    const updates: Partial<UserProfile> = {};
-                    if (metadata.full_name && profile.name === 'Guest Writer') updates.name = metadata.full_name;
-                    if (metadata.avatar_url && !profile.avatarUrl) updates.avatarUrl = metadata.avatar_url;
-                    if (Object.keys(updates).length > 0) {
-                        await supabaseService.updateProfile(user.id, updates);
-                        profile = { ...profile, ...updates };
-                    }
-                }
-                setUserProfile(profile);
-                if (['/', '/auth'].includes(location.pathname)) navigate('/library');
-                supabaseService.logAudit(user.id, 'auth', 'User logged in');
-            } else {
-                const metadata = user.user_metadata;
-                const initialProfile: UserProfile = {
-                    name: metadata?.full_name || "Guest Writer",
-                    bio: "A traveler in the realm of imagination.",
-                    avatarColor: "#60A5FA",
-                    avatarUrl: metadata?.avatar_url,
-                    joinedDate: Date.now(),
-                    credits: 50,
-                    subscriptionTier: 'free'
-                };
-                await supabaseService.updateProfile(user.id, initialProfile);
-                setUserProfile(initialProfile);
-                navigate('/library');
-                supabaseService.logAudit(user.id, 'auth', 'New user registered');
+      if (user) {
+        let profile = await supabaseService.getProfile(user.id);
+        if (profile) {
+          const metadata = user.user_metadata;
+          if (metadata && (!profile.avatarUrl || profile.name === 'Guest Writer')) {
+            const updates: Partial<UserProfile> = {};
+            if (metadata.full_name && profile.name === 'Guest Writer') updates.name = metadata.full_name;
+            if (metadata.avatar_url && !profile.avatarUrl) updates.avatarUrl = metadata.avatar_url;
+            if (Object.keys(updates).length > 0) {
+              await supabaseService.updateProfile(user.id, updates);
+              profile = { ...profile, ...updates };
             }
-            const cloudStories = await supabaseService.getStories(user.id);
-            setStories(cloudStories);
+          }
+          setUserProfile(profile);
+          if (['/', '/auth'].includes(location.pathname)) navigate('/library');
+          supabaseService.logAudit(user.id, 'auth', 'User logged in');
         } else {
-            try {
-                const savedStories = localStorage.getItem('gerertales_stories');
-                if (savedStories) setStories(JSON.parse(savedStories));
-                const savedProfile = localStorage.getItem('gerertales_profile');
-                if (savedProfile) setUserProfile(JSON.parse(savedProfile));
-                else setUserProfile({
-                    name: "Guest Writer",
-                    bio: "A traveler in the realm of imagination.",
-                    avatarColor: "#60A5FA",
-                    joinedDate: Date.now(),
-                    credits: 50,
-                    subscriptionTier: 'free'
-                });
-            } catch (e) {
-                console.warn("Failed to load guest data", e);
-            }
+          const metadata = user.user_metadata;
+          const initialProfile: UserProfile = {
+            name: metadata?.full_name || "Guest Writer",
+            bio: "A traveler in the realm of imagination.",
+            avatarColor: "#60A5FA",
+            avatarUrl: metadata?.avatar_url,
+            joinedDate: Date.now(),
+            credits: 50,
+            subscriptionTier: 'free'
+          };
+          await supabaseService.updateProfile(user.id, initialProfile);
+          setUserProfile(initialProfile);
+          navigate('/library');
+          supabaseService.logAudit(user.id, 'auth', 'New user registered');
         }
+
+        // Migrate any guest data
+        await supabaseService.migrateFromLocalStorage(user.id);
+
+        const cloudStories = await supabaseService.getStories(user.id);
+        setStories(cloudStories);
+      } else {
+        try {
+          const savedStories = localStorage.getItem('gerertales_stories');
+          if (savedStories) setStories(JSON.parse(savedStories));
+          const savedProfile = localStorage.getItem('gerertales_profile');
+          if (savedProfile) setUserProfile(JSON.parse(savedProfile));
+          else setUserProfile({
+            name: "Guest Writer",
+            bio: "A traveler in the realm of imagination.",
+            avatarColor: "#60A5FA",
+            joinedDate: Date.now(),
+            credits: 50,
+            subscriptionTier: 'free'
+          });
+        } catch (e) {
+          console.warn("Failed to load guest data", e);
+        }
+      }
     };
     syncData();
   }, [user]);
 
   useEffect(() => {
-      const initSettings = async () => {
-          try {
-              let settings: AppSettings;
-              const savedSettings = localStorage.getItem('gerertales_settings');
-              if (savedSettings) settings = JSON.parse(savedSettings);
-              else settings = { theme: 'nordic-dark' } as AppSettings;
+    const initSettings = async () => {
+      try {
+        let settings: AppSettings;
+        const savedSettings = localStorage.getItem('gerertales_settings');
+        if (savedSettings) settings = JSON.parse(savedSettings);
+        else settings = { theme: 'nordic-dark' } as AppSettings;
 
-              const globalConfig = await supabaseService.getSystemConfig();
-              if (globalConfig) {
-                  settings = { ...globalConfig, ...settings };
-                  localStorage.setItem('gerertales_settings', JSON.stringify(settings));
-              }
-              applyTheme(settings.theme || 'nordic-dark');
-          } catch (e) {
-              applyTheme('nordic-dark');
-          }
-      };
-      initSettings();
+        const globalConfig = await supabaseService.getSystemConfig();
+        if (globalConfig) {
+          settings = { ...globalConfig, ...settings };
+          localStorage.setItem('gerertales_settings', JSON.stringify(settings));
+        }
+        applyTheme(settings.theme || 'nordic-dark');
+      } catch (e) {
+        applyTheme('nordic-dark');
+      }
+    };
+    initSettings();
   }, [location.pathname]);
 
   const currentStory = stories.find(s => s.id === activeStoryId);
-  
+
   useEffect(() => {
     const pathParts = location.pathname.split('/');
     if (pathParts[1] === 'writing' && pathParts[2]) {
-        const storyId = pathParts[2];
-        if (!activeStoryId || activeStoryId !== storyId) {
-            setActiveStoryId(storyId);
-            if (!stories.find(s => s.id === storyId)) {
-                supabaseService.getStoryById(storyId).then(story => {
-                    if (story) setStories([story, ...stories]);
-                });
-            }
+      const storyId = pathParts[2];
+      if (!activeStoryId || activeStoryId !== storyId) {
+        setActiveStoryId(storyId);
+        if (!stories.find(s => s.id === storyId)) {
+          supabaseService.getStoryById(storyId).then(story => {
+            if (story) setStories([story, ...stories]);
+          });
         }
+      }
     }
   }, [location.pathname]);
 
   const userTier = userProfile?.subscriptionTier || 'free';
 
   const hasCredits = (): boolean => {
-      if (!userProfile || userProfile.credits <= 0) {
-          notify("You have run out of credits. Please add more in Settings to continue.");
-          return false;
-      }
-      return true;
+    if (!userProfile || userProfile.credits <= 0) {
+      notify("You have run out of credits. Please add more in Settings to continue.");
+      return false;
+    }
+    return true;
   };
 
   const handleSelectStory = async (story: Story) => {
@@ -184,50 +188,50 @@ const App: React.FC = () => {
   const handleDeleteStory = (id: string, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     setDialog({
-        isOpen: true,
-        title: "Delete Tale",
-        message: "Are you sure you want to discard this story forever? This action cannot be undone.",
-        type: 'danger',
-        onConfirm: () => {
-            setStories(stories.filter(s => s.id !== id));
-            if (user) supabaseService.deleteStory(user.id, id);
-            setDialog(d => ({ ...d, isOpen: false }));
-            notify("Tale discarded.");
-        }
+      isOpen: true,
+      title: "Delete Tale",
+      message: "Are you sure you want to discard this story forever? This action cannot be undone.",
+      type: 'danger',
+      onConfirm: () => {
+        setStories(stories.filter(s => s.id !== id));
+        if (user) supabaseService.deleteStory(user.id, id);
+        setDialog(d => ({ ...d, isOpen: false }));
+        notify("Tale discarded.");
+      }
     });
   };
 
   const handleImportStory = (file: File) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
-        try {
-            const content = e.target?.result as string;
-            const imported = JSON.parse(content) as Story;
-            imported.id = crypto.randomUUID();
-            imported.lastModified = Date.now();
-            imported.ownerId = user?.id;
-            
-            setStories([imported, ...stories]);
-            if (user) await supabaseService.saveStory(user.id, imported);
-            notify(`"${imported.title}" imported successfully.`);
-        } catch (err) {
-            notify("Failed to parse the tale file.");
-        }
+      try {
+        const content = e.target?.result as string;
+        const imported = JSON.parse(content) as Story;
+        imported.id = crypto.randomUUID();
+        imported.lastModified = Date.now();
+        imported.ownerId = user?.id;
+
+        setStories([imported, ...stories]);
+        if (user) await supabaseService.saveStory(user.id, imported);
+        notify(`"${imported.title}" imported successfully.`);
+      } catch (err) {
+        notify("Failed to parse the tale file.");
+      }
     };
     reader.readAsText(file);
   };
 
   const handleBackupStory = (story: Story, e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const blob = new Blob([JSON.stringify(story, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${story.title.replace(/\s+/g, '_')}.gtale`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    e.preventDefault();
+    e.stopPropagation();
+    const blob = new Blob([JSON.stringify(story, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${story.title.replace(/\s+/g, '_')}.gtale`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleSendMessage = async (text: string) => {
@@ -246,22 +250,22 @@ const App: React.FC = () => {
 
       if (isProse) {
         const { text: prose, cost } = await TextService.generateProse(
-            currentMessages.map(m => ({role: m.role, text: m.text})), 
-            currentChapter,
-            currentStory.format,
-            text,
-            userTier
+          currentMessages.map(m => ({ role: m.role, text: m.text })),
+          currentChapter,
+          currentStory.format,
+          text,
+          userTier
         );
         await deductCredits(user, cost, "Prose Generation");
-        updateStoryContent(user, currentStory.id, currentStory.activeStoryId, currentStory.activeChapterIndex, currentContent ? `${currentContent}\n\n${prose}` : prose);
+        updateStoryContent(user, currentStory.id, currentStory.activeChapterIndex, currentContent ? `${currentContent}\n\n${prose}` : prose);
         setMessages([...currentMessages, { id: crypto.randomUUID(), role: 'model', text: "I've added that to the draft. How does it feel?" }]);
       } else {
         const { text: response, cost } = await TextService.generateProse(
-            currentMessages.map(m => ({role: m.role, text: m.text})),
-            currentChapter,
-            currentStory.format,
-            "Provide brief advice. Do not write prose.",
-            userTier
+          currentMessages.map(m => ({ role: m.role, text: m.text })),
+          currentChapter,
+          currentStory.format,
+          "Provide brief advice. Do not write prose.",
+          userTier
         );
         await deductCredits(user, cost, "Chat");
         setMessages([...currentMessages, { id: crypto.randomUUID(), role: 'model', text: response }]);
@@ -282,24 +286,24 @@ const App: React.FC = () => {
   return (
     <div className={`flex h-screen w-screen bg-dark-bg text-text-main transition-all duration-500`}>
       {!isLandingPage && !isAuthPage && !isReaderPage && userProfile && (
-        <AppNavigation 
-            userProfile={userProfile}
-            user={user}
-            onLogin={() => navigate('/auth')}
+        <AppNavigation
+          userProfile={userProfile}
+          user={user}
+          onLogin={() => navigate('/auth')}
         />
       )}
-      
-      <div className={`flex-1 flex h-full relative ${['/', '/auth', '/onboarding', '/profile', '/settings', '/discover', '/details', '/read'].some(p => location.pathname.startsWith(p)) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
+
+      <div className={`flex-1 flex h-full relative ${isReaderPage ? 'justify-center' : ''} ${['/', '/auth', '/onboarding', '/profile', '/settings', '/discover', '/details', '/read'].some(p => location.pathname.startsWith(p)) ? 'overflow-y-auto no-scrollbar' : 'overflow-hidden'}`}>
         <Routes>
           <Route path="/" element={<LandingPage user={user} />} />
           <Route path="/auth" element={user ? <Navigate to="/library" /> : <Auth />} />
-          
+
           <Route path="/discover" element={
-            <StoryLibrary 
-              stories={[]} 
+            <StoryLibrary
+              stories={[]}
               onSelectStory={handleSelectStory}
               onCreateNew={() => navigate('/onboarding')}
-              onDeleteStory={() => {}}
+              onDeleteStory={() => { }}
               onImportStory={handleImportStory}
               onBackupStory={handleBackupStory}
               isPublicView={true}
@@ -308,7 +312,7 @@ const App: React.FC = () => {
           } />
 
           <Route path="/library" element={
-            <StoryLibrary 
+            <StoryLibrary
               stories={stories}
               onSelectStory={handleSelectStory}
               onCreateNew={() => navigate('/onboarding')}
@@ -323,106 +327,112 @@ const App: React.FC = () => {
           <Route path="/read/:storyId" element={<StoryReader />} />
 
           <Route path="/onboarding" element={
-            <Onboarding 
-                onConfirm={async (c, b) => {
-                    const id = await createStory(user, c, b);
-                    if (id) {
-                        setMessages([{
-                            id: 'welcome',
-                            role: 'model',
-                            text: `The canvas is ready. Chapter 1: "${b.toc[0].title}" awaits your lead.`
-                        }]);
-                        navigate(`/writing/${id}`);
-                    }
-                }} 
-                isLoading={isAiProcessing} 
-                onCheckCredits={hasCredits}
-                onDeductCredits={(amt, feat) => deductCredits(user, amt, feat)}
-                userTier={userTier}
-             />
+            <Onboarding
+              onConfirm={async (c, b) => {
+                const id = await createStory(user, c, b);
+                if (id) {
+                  setMessages([{
+                    id: 'welcome',
+                    role: 'model',
+                    text: `The canvas is ready. Chapter 1: "${b.toc[0].title}" awaits your lead.`
+                  }]);
+                  navigate(`/writing/${id}`);
+                }
+              }}
+              isLoading={isAiProcessing}
+              onCheckCredits={hasCredits}
+              onDeductCredits={(amt, feat) => deductCredits(user, amt, feat)}
+              userTier={userTier}
+            />
           } />
 
           <Route path="/writing/:storyId" element={
             currentStory ? (
-                <>
-                    <div className="w-full md:w-2/5 h-full z-10 border-r border-dark-border flex-shrink-0">
-                        <ChatInterface 
-                            messages={messages} 
-                            onSendMessage={handleSendMessage}
-                            isTyping={isAiProcessing}
-                            chapterTitle={currentStory.toc[currentStory.activeChapterIndex]?.title || 'Untitled'}
-                        />
-                    </div>
-                    <div className="w-full md:w-3/5 h-full relative">
-                        <StoryBlueprint 
-                            story={currentStory} 
-                            currentChapterIndex={currentStory.activeChapterIndex}
-                            onChapterSelect={(idx) => {
-                                const updated = { ...currentStory, activeChapterIndex: idx };
-                                setStories(stories.map(s => s.id === updated.id ? updated : s));
-                                if (user) supabaseService.saveStory(user.id, updated);
-                            }}
-                            onContentUpdate={(content) => updateStoryContent(user, currentStory.id, currentStory.id, currentStory.activeChapterIndex, content)}
-                            onChapterUpdate={(idx, updates) => {
-                                const updatedChapters = [...currentStory.toc];
-                                updatedChapters[idx] = { ...updatedChapters[idx], ...updates };
-                                const updatedStory = { ...currentStory, toc: updatedChapters };
-                                setStories(stories.map(s => s.id === updatedStory.id ? updatedStory : s));
-                                if (user) supabaseService.saveStory(user.id, updatedStory);
-                            }}
-                            checkCredits={hasCredits}
-                            deductCredits={(amt, feat) => deductCredits(user, amt, feat)}
-                            isOwner={user?.id === currentStory.ownerId}
-                            onTogglePublish={async () => {
-                                const isPublic = !currentStory.isPublic;
-                                const updatedStory = { ...currentStory, isPublic, publishedAt: isPublic ? Date.now() : currentStory.publishedAt };
-                                setStories(stories.map(s => s.id === updatedStory.id ? updatedStory : s));
-                                if (user) await supabaseService.saveStory(user.id, updatedStory);
-                            }}
-                            userId={user?.id}
-                            userCredits={userProfile?.credits}
-                            onRefreshStory={async () => {
-                                if (user) {
-                                    const cloudStories = await supabaseService.getStories(user.id);
-                                    setStories(cloudStories);
-                                }
-                            }}
-                        />
-                    </div>
-                </>
+              <>
+                {/* Mobile: Stack vertically, Desktop: Side-by-side */}
+                <div className="flex flex-col md:flex-row w-full h-full">
+                  {/* Chat Interface - Full width on mobile, 40% on desktop */}
+                  <div className="w-full md:w-2/5 h-1/2 md:h-full z-10 border-b md:border-b-0 md:border-r border-dark-border flex-shrink-0 transition-all duration-300">
+                    <ChatInterface
+                      messages={messages}
+                      onSendMessage={handleSendMessage}
+                      isTyping={isAiProcessing}
+                      chapterTitle={currentStory.toc[currentStory.activeChapterIndex]?.title || 'Untitled'}
+                      story={currentStory}
+                    />
+                  </div>
+                  {/* Story Blueprint - Full width on mobile, 60% on desktop */}
+                  <div className="w-full md:w-3/5 h-1/2 md:h-full relative transition-all duration-300">
+                    <StoryBlueprint
+                      story={currentStory}
+                      currentChapterIndex={currentStory.activeChapterIndex}
+                      onChapterSelect={(idx) => {
+                        const updated = { ...currentStory, activeChapterIndex: idx };
+                        setStories(stories.map(s => s.id === updated.id ? updated : s));
+                        if (user) supabaseService.saveStory(user.id, updated);
+                      }}
+                      onContentUpdate={(content) => updateStoryContent(user, currentStory.id, currentStory.id, currentStory.activeChapterIndex, content)}
+                      onChapterUpdate={(idx, updates) => {
+                        const updatedChapters = [...currentStory.toc];
+                        updatedChapters[idx] = { ...updatedChapters[idx], ...updates };
+                        const updatedStory = { ...currentStory, toc: updatedChapters };
+                        setStories(stories.map(s => s.id === updatedStory.id ? updatedStory : s));
+                        if (user) supabaseService.saveStory(user.id, updatedStory);
+                      }}
+                      checkCredits={hasCredits}
+                      deductCredits={(amt, feat) => deductCredits(user, amt, feat)}
+                      isOwner={user?.id === currentStory.ownerId}
+                      onTogglePublish={async () => {
+                        const isPublic = !currentStory.isPublic;
+                        const updatedStory = { ...currentStory, isPublic, publishedAt: isPublic ? Date.now() : currentStory.publishedAt };
+                        setStories(stories.map(s => s.id === updatedStory.id ? updatedStory : s));
+                        if (user) await supabaseService.saveStory(user.id, updatedStory);
+                      }}
+                      userId={user?.id}
+                      userCredits={userProfile?.credits}
+                      onRefreshStory={async () => {
+                        if (user) {
+                          const cloudStories = await supabaseService.getStories(user.id);
+                          setStories(cloudStories);
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
             ) : <Navigate to="/library" />
           } />
 
           <Route path="/profile" element={
             userProfile ? (
-                <UserProfileView 
-                    profile={userProfile}
-                    stories={stories}
-                    onUpdateProfile={setUserProfile}
-                    user={user}
-                    onLogout={async () => { await supabaseService.signOut(); navigate('/'); }}
-                />
+              <UserProfileView
+                profile={userProfile}
+                stories={stories}
+                onUpdateProfile={setUserProfile}
+                user={user}
+                onLogout={async () => { await supabaseService.signOut(); navigate('/'); }}
+              />
             ) : <Navigate to="/auth" />
           } />
 
           <Route path="/settings" element={
             userProfile ? (
-                <SettingsView 
-                    onSave={() => {}}
-                    onCancel={() => navigate('/library')}
-                    userProfile={userProfile}
-                    onUpdateCredits={(amt) => {
-                        const updated = { ...userProfile, credits: amt };
-                        setUserProfile(updated);
-                        if (user) supabaseService.updateProfile(user.id, updated);
-                    }}
-                    onUpdateTier={(tier) => {
-                        const updated = { ...userProfile, subscriptionTier: tier as any };
-                        setUserProfile(updated);
-                        if (user) supabaseService.updateProfile(user.id, updated);
-                    }}
-                    user={user}
-                />
+              <SettingsView
+                onSave={() => { }}
+                onCancel={() => navigate('/library')}
+                userProfile={userProfile}
+                onUpdateCredits={(amt) => {
+                  const updated = { ...userProfile, credits: amt };
+                  setUserProfile(updated);
+                  if (user) supabaseService.updateProfile(user.id, updated);
+                }}
+                onUpdateTier={(tier) => {
+                  const updated = { ...userProfile, subscriptionTier: tier as any };
+                  setUserProfile(updated);
+                  if (user) supabaseService.updateProfile(user.id, updated);
+                }}
+                user={user}
+              />
             ) : <Navigate to="/auth" />
           } />
 
@@ -431,14 +441,14 @@ const App: React.FC = () => {
         </Routes>
       </div>
 
-      <Dialog 
-          isOpen={dialog.isOpen}
-          title={dialog.title}
-          message={dialog.message}
-          onConfirm={dialog.onConfirm}
-          onCancel={() => setDialog(d => ({ ...d, isOpen: false }))}
-          type={dialog.type}
-          confirmLabel={dialog.type === 'danger' ? "Delete" : "Confirm"}
+      <Dialog
+        isOpen={dialog.isOpen}
+        title={dialog.title}
+        message={dialog.message}
+        onConfirm={dialog.onConfirm}
+        onCancel={() => setDialog(d => ({ ...d, isOpen: false }))}
+        type={dialog.type}
+        confirmLabel={dialog.type === 'danger' ? "Delete" : "Confirm"}
       />
     </div>
   );
