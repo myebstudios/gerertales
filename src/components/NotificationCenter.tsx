@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useStore } from '../services/store';
 import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
@@ -52,7 +53,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
         onClose();
     };
 
-    return (
+    return createPortal(
         <div className="fixed top-6 left-[72px] w-96 max-h-[calc(100vh-48px)] bg-dark-card/95 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] z-[100] flex flex-col overflow-hidden animate-in fade-in slide-in-from-left-4 duration-500">
             <div className="p-8 border-b border-white/5 flex justify-between items-center bg-zinc-900/50">
                 <h3 className="text-[11px] font-black uppercase tracking-[0.3em] text-cobalt">The Ledger of Activity</h3>
@@ -107,7 +108,8 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose
                     </button>
                 </div>
             )}
-        </div>
+        </div>,
+        document.body
     );
 };
 

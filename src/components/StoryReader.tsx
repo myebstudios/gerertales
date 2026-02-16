@@ -4,7 +4,7 @@ import { Story, Chapter, TTSProvider } from '../types';
 import { supabaseService } from '../services/supabaseService';
 import { supabase } from '../services/supabaseClient';
 import * as VoiceService from '../services/voiceService';
-import { VOICE_LISTS } from '../services/voiceService';
+import { VOICE_LISTS, getElevenLabsVoices } from '../services/voiceService';
 import { useNotify } from '../services/NotificationContext';
 import { useStore } from '../services/store';
 
@@ -214,7 +214,7 @@ const StoryReader: React.FC = () => {
     const getVoiceOptions = () => {
         if (ttsProvider === 'browser') return browserVoices.map(v => v.name).sort();
         const settings = JSON.parse(localStorage.getItem('gerertales_settings') || '{}');
-        if (settings.ttsModel?.includes('eleven')) return VOICE_LISTS.elevenlabs.map((v: any) => v.name);
+        if (settings.ttsModel?.includes('eleven')) return getElevenLabsVoices().map((v: any) => v.name);
         if (settings.ttsModel?.startsWith('tts')) return VOICE_LISTS.openai.map((v: any) => v.name);
         return VOICE_LISTS.gemini.map((v: any) => v.name);
     };

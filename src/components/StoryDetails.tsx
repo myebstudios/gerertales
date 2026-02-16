@@ -10,7 +10,7 @@ const StoryDetails: React.FC = () => {
     const { storyId } = useParams();
     const navigate = useNavigate();
     const { notify } = useNotify();
-    const { userProfile, deductCredits, setStories, stories } = useStore();
+    const { userProfile, deductCredits, setStories, setActiveStoryId, stories } = useStore();
 
     const [story, setStory] = useState<Story | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -26,6 +26,15 @@ const StoryDetails: React.FC = () => {
     const [comments, setComments] = useState<StoryComment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [replyTo, setReplyTo] = useState<string | null>(null);
+
+    const upsertStoryInStore = (nextStory: Story) => {
+        const currentStories = useStore.getState().stories;
+        const existing = currentStories.find(s => s.id === nextStory.id);
+        const updated = existing
+            ? currentStories.map(s => s.id === nextStory.id ? nextStory : s)
+            : [nextStory, ...currentStories];
+        setStories(updated);
+    };
 
     useEffect(() => {
         if (storyId) {
@@ -45,6 +54,7 @@ const StoryDetails: React.FC = () => {
                 const res = await supabaseService.getStoryById(storyId);
                 if (res) {
                     setStory(res);
+                    upsertStoryInStore(res);
                     const comms = await supabaseService.getComments(storyId);
                     setComments(comms);
                     
@@ -234,7 +244,13 @@ const StoryDetails: React.FC = () => {
                             </div>
 
                             <div className="space-y-3">
-                                {isOwner && <button onClick={() => navigate(`/writing/${story.id}`)} className="w-full py-4 rounded-2xl bg-white text-black text-[11px] font-black uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all shadow-xl shadow-white/5">Continue Writing</button>}
+                                {isOwner && <button onClick={() => {
+                                    if (story) {
+                                        upsertStoryInStore(story);
+                                        setActiveStoryId(story.id);
+                                    }
+                                    navigate(`/writing/${story.id}`);
+                                }} className="w-full py-4 rounded-2xl bg-white text-black text-[11px] font-black uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all shadow-xl shadow-white/5">Continue Writing</button>}
                                 <button onClick={() => navigate(`/read/${story.id}`)} className="w-full py-4 rounded-2xl bg-cobalt text-white text-[11px] font-black uppercase tracking-[0.2em] hover:bg-blue-500 transition-all shadow-xl shadow-cobalt/20">Enter Reading Mode</button>
                                 
                                 {/* Add to Collection for Non-Owners */}

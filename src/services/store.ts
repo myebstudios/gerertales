@@ -100,13 +100,15 @@ export const useStore = create<StoryState>((set, get) => ({
       const ownedStories = await supabaseService.getStories(user.id);
       const savedStories = await supabaseService.getSavedStories(user.id);
       
-      // Merge and remove duplicates
-      const allStories = [...ownedStories];
-      savedStories.forEach(saved => {
-        if (!allStories.find(s => s.id === saved.id)) {
-          allStories.push(saved);
-        }
+      // Merge owned + saved with owned taking precedence
+      const storyMap = new Map<string, Story>();
+      ownedStories.forEach(story => storyMap.set(story.id, story));
+      savedStories.forEach(story => {
+        if (!storyMap.has(story.id)) storyMap.set(story.id, story);
       });
+      const allStories = Array.from(storyMap.values()).sort(
+        (a, b) => (b.lastModified || 0) - (a.lastModified || 0)
+      );
 
       // Fetch Global Config
       const globalConfig = await supabaseService.getSystemConfig();
@@ -116,7 +118,19 @@ export const useStore = create<StoryState>((set, get) => ({
         localStorage.setItem('gerertales_settings', JSON.stringify({ ...globalConfig, ...current }));
       }
 
-      set({ userProfile: profile, stories: allStories });
+      // Sync active story + messages if currently in writing view
+      const pathParts = window.location.pathname.split('/');
+      let activeStoryId: string | null = get().activeStoryId;
+      let activeMessages: Message[] = get().messages;
+      if (pathParts[1] === 'writing' && pathParts[2]) {
+        const currentStory = allStories.find(s => s.id === pathParts[2]);
+        if (currentStory) {
+          activeStoryId = currentStory.id;
+          activeMessages = currentStory.messages || [];
+        }
+      }
+
+      set({ userProfile: profile, stories: allStories, activeStoryId, messages: activeMessages });
       
       // Real-time listener for notifications
       supabaseService.subscribeToNotifications(user.id, (newNotif) => {
@@ -131,15 +145,6 @@ export const useStore = create<StoryState>((set, get) => ({
       });
 
       await get().fetchNotifications(user.id);
-      
-      // If we are currently on a writing page, ensure messages are synced
-      const pathParts = window.location.pathname.split('/');
-      if (pathParts[1] === 'writing' && pathParts[2]) {
-        const currentStory = allStories.find(s => s.id === pathParts[2]);
-        if (currentStory) {
-          set({ activeStoryId: currentStory.id, messages: currentStory.messages || [] });
-        }
-      }
     } catch (e) {
       console.error("Store sync failed", e);
     }

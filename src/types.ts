@@ -135,6 +135,7 @@ export interface AppSettings {
   imageResolution: 'Low' | '1K' | '2K' | '4K';
   ttsModel: string;
   elevenLabsVoiceId?: string;
+  elevenLabsAfricanVoices?: { name: string; id: string }[];
   ttsProvider: TTSProvider;
   theme: Theme;
 }
@@ -161,4 +162,3 @@ export interface StoryBlueprintData {
   locations: Location[];
   toc: Chapter[];
 }
-

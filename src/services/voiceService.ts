@@ -20,18 +20,35 @@ export const VOICE_LISTS: Record<string, any> = {
     ],
     'elevenlabs': [
         { name: 'Rachel', id: '21m00Tcm4TlvDq8ikWAM' },
-        { name: 'Antoni', id: 'ErXw79k9X55p24L2tq0O' },
-        { name: 'Elli', id: 'MF3mGyEYCl7XYWbV9V6O' },
-        { name: 'Josh', id: 'Tx33qxS9ppHS7LmdUv7O' },
-        { name: 'Amara (African)', id: 'SAz9YHcvj6GT2ys8y8Z1' },
-        { name: 'Tayo (African)', id: '2EiwWnXFnvU5JabPnv8n' },
-        { name: 'Adewale (African)', id: 'onw9f1STCHnZhwqPNo4n' },
-        { name: 'Arnold', id: 'VR6A9C78zM76B9Xp6m3U' },
-        { name: 'Adam', id: 'pNInz6S6IPD9S0G42LdD' }
+        { name: 'Drew', id: '29vD33N1CtxCmqQRPOHJ' },
+        { name: 'Clyde', id: '2EiwWnXFnvU5JabPnv8n' },
+        { name: 'Paul', id: '5Q0t7uMcjvnagumLfvZi' },
+        { name: 'Domi', id: 'AZnzlk1XvdvUeBnXmlld' },
+        { name: 'Dave', id: 'CYw3kZ02Hs0563khs1Fj' },
+        { name: 'Fin', id: 'D38z5RcWu1voky8WS1ja' },
+        { name: 'Sarah', id: 'EXAVITQu4vr4xnSDxMaL' },
+        { name: 'Antoni', id: 'ErXwobaYiN019PkySvjV' },
+        { name: 'Thomas', id: 'GBv7mTt0atIp3Br8iCZE' },
+        { name: 'Charlie', id: 'IKne3meq5aSn9XLyUdCD' }
     ],
     'xai': [
         { name: 'Grok Beta', id: 'grok-1' }
     ]
+};
+
+export const getElevenLabsVoices = (): { name: string; id: string }[] => {
+    let settings: any = {};
+    try {
+        settings = JSON.parse(localStorage.getItem('gerertales_settings') || '{}');
+    } catch (e) {
+        settings = {};
+    }
+    const africanVoices = Array.isArray(settings.elevenLabsAfricanVoices)
+        ? settings.elevenLabsAfricanVoices
+              .filter((v: any) => v && typeof v.id === 'string' && v.id.trim() && typeof v.name === 'string')
+              .map((v: any) => ({ name: `${v.name} (African)`, id: v.id }))
+        : [];
+    return [...VOICE_LISTS.elevenlabs, ...africanVoices];
 };
 
 const chunkText = (text: string, maxLength: number = 4000): string[] => {

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Chapter, Story, TTSProvider, StoryComment } from '../types';
 import { jsPDF } from "jspdf";
 import * as VoiceService from '../services/voiceService';
-import { VOICE_LISTS } from '../services/voiceService';
+import { VOICE_LISTS, getElevenLabsVoices } from '../services/voiceService';
 import * as ImageService from '../services/imageService';
 import { supabaseService } from '../services/supabaseService';
 import { useNotify } from '../services/NotificationContext';
@@ -388,7 +388,7 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
         const savedSettings = localStorage.getItem('gerertales_settings');
         if (savedSettings) {
             const parsed = JSON.parse(savedSettings);
-            if (parsed.ttsModel && parsed.ttsModel.includes('eleven')) return VOICE_LISTS.elevenlabs.map((v: any) => v.name);
+            if (parsed.ttsModel && parsed.ttsModel.includes('eleven')) return getElevenLabsVoices().map((v: any) => v.name);
             if (parsed.ttsModel && (parsed.ttsModel.startsWith('tts') || parsed.ttsModel.includes('openai'))) return VOICE_LISTS.openai.map((v: any) => v.name);
         }
         return VOICE_LISTS.gemini.map((v: any) => v.name);
