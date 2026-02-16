@@ -65,13 +65,42 @@ export const useStore = create<StoryState>((set, get) => ({
 
   loadUserContent: async (user) => {
     try {
-      const profile = await supabaseService.getProfile(user.id);
+      let profile = await supabaseService.getProfile(user.id);
+      
+      // Sync Google metadata if needed
+      if (profile) {
+        const metadata = user.user_metadata;
+        if (metadata && (!profile.avatarUrl || profile.name === 'Guest Writer')) {
+          const updates: Partial<UserProfile> = {};
+          if (metadata.full_name && profile.name === 'Guest Writer') updates.name = metadata.full_name;
+          if (metadata.avatar_url && !profile.avatarUrl) updates.avatarUrl = metadata.avatar_url;
+          if (Object.keys(updates).length > 0) {
+            await supabaseService.updateProfile(user.id, updates);
+            profile = { ...profile, ...updates };
+          }
+        }
+      } else {
+        const metadata = user.user_metadata;
+        profile = {
+          name: metadata?.full_name || "Guest Writer",
+          bio: "A traveler in the realm of imagination.",
+          avatarColor: "#60A5FA",
+          avatarUrl: metadata?.avatar_url,
+          joinedDate: Date.now(),
+          credits: 50,
+          subscriptionTier: 'free'
+        };
+        await supabaseService.updateProfile(user.id, profile);
+      }
+
+      // Migrate guest data
+      await supabaseService.migrateFromLocalStorage(user.id);
       
       // Fetch BOTH owned stories and stories saved from the public library
       const ownedStories = await supabaseService.getStories(user.id);
       const savedStories = await supabaseService.getSavedStories(user.id);
       
-      // Merge and remove duplicates (though IDs should be unique)
+      // Merge and remove duplicates
       const allStories = [...ownedStories];
       savedStories.forEach(saved => {
         if (!allStories.find(s => s.id === saved.id)) {
@@ -89,16 +118,28 @@ export const useStore = create<StoryState>((set, get) => ({
 
       set({ userProfile: profile, stories: allStories });
       
+      // Real-time listener for notifications
+      supabaseService.subscribeToNotifications(user.id, (newNotif) => {
+        set((state) => {
+          if (state.notifications.find(n => n.id === newNotif.id)) return state;
+          const updated = [newNotif, ...state.notifications];
+          return {
+            notifications: updated,
+            unreadNotificationsCount: updated.filter(n => !n.isRead).length
+          };
+        });
+      });
+
+      await get().fetchNotifications(user.id);
+      
       // If we are currently on a writing page, ensure messages are synced
       const pathParts = window.location.pathname.split('/');
       if (pathParts[1] === 'writing' && pathParts[2]) {
         const currentStory = allStories.find(s => s.id === pathParts[2]);
         if (currentStory) {
-          set({ messages: currentStory.messages || [] });
+          set({ activeStoryId: currentStory.id, messages: currentStory.messages || [] });
         }
       }
-
-      await get().fetchNotifications(user.id);
     } catch (e) {
       console.error("Store sync failed", e);
     }
@@ -110,18 +151,6 @@ export const useStore = create<StoryState>((set, get) => ({
       set({ 
         notifications, 
         unreadNotificationsCount: notifications.filter(n => !n.isRead).length 
-      });
-
-      // Setup Real-time listener
-      supabaseService.subscribeToNotifications(userId, (newNotif) => {
-        set((state) => {
-          if (state.notifications.find(n => n.id === newNotif.id)) return state;
-          const updated = [newNotif, ...state.notifications];
-          return {
-            notifications: updated,
-            unreadNotificationsCount: updated.filter(n => !n.isRead).length
-          };
-        });
       });
     } catch (e) { console.error("Notification fetch failed", e); }
   },

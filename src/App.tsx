@@ -40,7 +40,7 @@ const App: React.FC = () => {
     activeStoryId, setActiveStoryId,
     messages, setMessages,
     isAiProcessing, setIsAiProcessing,
-    createStory, updateStoryContent, deductCredits
+    createStory, updateStoryContent, updateStoryMessages, deductCredits, loadUserContent
   } = useStore();
 
   const [dialog, setDialog] = useState<{
@@ -74,46 +74,11 @@ const App: React.FC = () => {
   useEffect(() => {
     const syncData = async () => {
       if (user) {
-        let profile = await supabaseService.getProfile(user.id);
-        if (profile) {
-          const metadata = user.user_metadata;
-          if (metadata && (!profile.avatarUrl || profile.name === 'Guest Writer')) {
-            const updates: Partial<UserProfile> = {};
-            if (metadata.full_name && profile.name === 'Guest Writer') updates.name = metadata.full_name;
-            if (metadata.avatar_url && !profile.avatarUrl) updates.avatarUrl = metadata.avatar_url;
-            if (Object.keys(updates).length > 0) {
-              await supabaseService.updateProfile(user.id, updates);
-              profile = { ...profile, ...updates };
-            }
-          }
-          setUserProfile(profile);
-          // Only navigate to library if we are at root or auth pages to allow direct linking to stories
-          if (['/', '/auth'].includes(location.pathname)) {
-            navigate('/library');
-          }
-          supabaseService.logAudit(user.id, 'auth', 'User logged in');
-        } else {
-          const metadata = user.user_metadata;
-          const initialProfile: UserProfile = {
-            name: metadata?.full_name || "Guest Writer",
-            bio: "A traveler in the realm of imagination.",
-            avatarColor: "#60A5FA",
-            avatarUrl: metadata?.avatar_url,
-            joinedDate: Date.now(),
-            credits: 50,
-            subscriptionTier: 'free'
-          };
-          await supabaseService.updateProfile(user.id, initialProfile);
-          setUserProfile(initialProfile);
+        await loadUserContent(user);
+        if (['/', '/auth'].includes(location.pathname)) {
           navigate('/library');
-          supabaseService.logAudit(user.id, 'auth', 'New user registered');
         }
-
-        // Migrate any guest data
-        await supabaseService.migrateFromLocalStorage(user.id);
-
-        const cloudStories = await supabaseService.getStories(user.id);
-        setStories(cloudStories);
+        supabaseService.logAudit(user.id, 'auth', 'User synced');
       } else {
         try {
           const savedStories = localStorage.getItem('gerertales_stories');
