@@ -5,11 +5,9 @@ import { Story, UserProfile, Message, StoryComment } from '../types';
 export const supabaseService = {
   // Auth
   async signInWithGoogle() {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const productionUrl = import.meta.env.VITE_APP_URL || 'https://gerertales-ai.netlify.app';
-    const redirectUrl = isLocalhost
-      ? window.location.origin + '/library'
-      : productionUrl + '/library';
+    // Dynamically use the current site's origin for the redirect
+    // This ensures production, staging (Netlify previews), and localhost all work automatically
+    const redirectUrl = `${window.location.origin}/library`;
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
