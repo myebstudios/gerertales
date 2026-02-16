@@ -32,6 +32,8 @@ const StoryReader: React.FC = () => {
     const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
     const startTimeRef = useRef<number>(0);
     const audioBufferRef = useRef<AudioBuffer | null>(null);
+    const audioElementRef = useRef<HTMLAudioElement | null>(null);
+    const streamAbortRef = useRef<(() => void) | null>(null);
     const progressIntervalRef = useRef<number | null>(null);
     const synthesisRef = useRef<SpeechSynthesis>(window.speechSynthesis);
 
@@ -96,6 +98,18 @@ const StoryReader: React.FC = () => {
             audioSourceRef.current.disconnect();
         }
         if (audioContextRef.current) audioContextRef.current.suspend();
+        if (audioElementRef.current) {
+            const src = audioElementRef.current.src;
+            audioElementRef.current.pause();
+            audioElementRef.current.src = '';
+            audioElementRef.current.load();
+            if (src.startsWith('blob:')) URL.revokeObjectURL(src);
+            audioElementRef.current = null;
+        }
+        if (streamAbortRef.current) {
+            streamAbortRef.current();
+            streamAbortRef.current = null;
+        }
         if (synthesisRef.current.speaking) synthesisRef.current.cancel();
         if (progressIntervalRef.current) window.clearInterval(progressIntervalRef.current);
         setIsPlaying(false);
@@ -122,7 +136,15 @@ const StoryReader: React.FC = () => {
                     playBrowserTTS();
                 }
             } else {
-                if (audioBufferRef.current && audioContextRef.current) {
+                if (audioElementRef.current) {
+                    if (audioElementRef.current.paused) {
+                        await audioElementRef.current.play();
+                        setIsPlaying(true);
+                    } else {
+                        audioElementRef.current.pause();
+                        setIsPlaying(false);
+                    }
+                } else if (audioBufferRef.current && audioContextRef.current) {
                     if (audioContextRef.current.state === 'suspended') {
                         await audioContextRef.current.resume();
                         setIsPlaying(true);
@@ -163,14 +185,40 @@ const StoryReader: React.FC = () => {
 
         setIsLoadingAudio(true);
         try {
-            const { audio, cost } = await VoiceService.generateSpeech(currentChapter.content, selectedVoice);
-            if (audio) {
-                const { data: { user } } = await supabase.auth.getUser();
-                await deductCredits(user, cost, "Neural Reading");
-                audioBufferRef.current = audio;
-                playBuffer(audio);
+            const settings = JSON.parse(localStorage.getItem('gerertales_settings') || '{}');
+            if (settings.ttsModel?.includes('eleven')) {
+                const { audio, cost, abort } = await VoiceService.generateSpeechStream(currentChapter.content, selectedVoice);
+                if (audio) {
+                    streamAbortRef.current = abort || null;
+                    bindStreamAudio(audio);
+                    audioElementRef.current = audio;
+                    const { data: { user } } = await supabase.auth.getUser();
+                    await deductCredits(user, cost, "Neural Reading");
+                    await audio.play();
+                } else {
+                    notify("Could not stream speech. Please check your connection.");
+                }
+            } else {
+                const { audio, cost } = await VoiceService.generateSpeech(currentChapter.content, selectedVoice);
+                if (audio) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    await deductCredits(user, cost, "Neural Reading");
+                    audioBufferRef.current = audio;
+                    playBuffer(audio);
+                }
             }
         } catch (e) { console.error(e); } finally { setIsLoadingAudio(false); }
+    };
+
+    const bindStreamAudio = (audio: HTMLAudioElement) => {
+        audio.onplay = () => { setIsPlaying(true); setPlaybackProgress(0); };
+        audio.onpause = () => { setIsPlaying(false); };
+        audio.onended = () => { setIsPlaying(false); setPlaybackProgress(100); };
+        audio.ontimeupdate = () => {
+            if (!audio.duration || Number.isNaN(audio.duration)) return;
+            const p = Math.min((audio.currentTime / audio.duration) * 100, 100);
+            setPlaybackProgress(p);
+        };
     };
 
     const playBuffer = (buffer: AudioBuffer, offset: number = 0) => {
@@ -219,6 +267,19 @@ const StoryReader: React.FC = () => {
         return VOICE_LISTS.gemini.map((v: any) => v.name);
     };
 
+    const applyNarrationPreset = () => {
+        const nextSettings = {
+            ...JSON.parse(localStorage.getItem('gerertales_settings') || '{}'),
+            ttsProvider: 'ai',
+            ttsModel: 'eleven_v3'
+        };
+        localStorage.setItem('gerertales_settings', JSON.stringify(nextSettings));
+        setTtsProvider('ai');
+        const voices = getElevenLabsVoices();
+        if (voices.length > 0) setSelectedVoice(voices[0].name);
+        stopAudio();
+    };
+
     if (isLoading) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted animate-pulse">Opening the Tome...</div>;
     if (!story) return <div className="h-screen w-screen bg-dark-bg flex items-center justify-center font-serif text-text-muted">Tale not found.</div>;
 
@@ -263,6 +324,12 @@ const StoryReader: React.FC = () => {
                                             {getVoiceOptions().map(v => <option key={v} value={v}>{v}</option>)}
                                         </select>
                                     </div>
+                                    <button
+                                        onClick={applyNarrationPreset}
+                                        className="w-full py-2 rounded-xl border border-cobalt/30 text-[9px] font-black uppercase tracking-[0.2em] text-cobalt hover:bg-cobalt/10 transition-all"
+                                    >
+                                        Narration Preset (Eleven v3)
+                                    </button>
                                 </div>
                             </div>
                         )}

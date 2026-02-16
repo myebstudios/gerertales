@@ -133,6 +133,8 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
     const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
     const startTimeRef = useRef<number>(0);
     const audioBufferRef = useRef<AudioBuffer | null>(null);
+    const audioElementRef = useRef<HTMLAudioElement | null>(null);
+    const streamAbortRef = useRef<(() => void) | null>(null);
     const progressIntervalRef = useRef<number | null>(null);
     const synthesisRef = useRef<SpeechSynthesis>(window.speechSynthesis);
 
@@ -231,6 +233,18 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
             audioSourceRef.current.disconnect();
         }
         if (audioContextRef.current) { audioContextRef.current.suspend(); }
+        if (audioElementRef.current) {
+            const src = audioElementRef.current.src;
+            audioElementRef.current.pause();
+            audioElementRef.current.src = '';
+            audioElementRef.current.load();
+            if (src.startsWith('blob:')) URL.revokeObjectURL(src);
+            audioElementRef.current = null;
+        }
+        if (streamAbortRef.current) {
+            streamAbortRef.current();
+            streamAbortRef.current = null;
+        }
         if (synthesisRef.current.speaking) { synthesisRef.current.cancel(); }
         if (progressIntervalRef.current) { window.clearInterval(progressIntervalRef.current); }
         setIsPlaying(false);
@@ -257,7 +271,15 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                     playBrowserTTS();
                 }
             } else {
-                if (audioBufferRef.current && audioContextRef.current) {
+                if (audioElementRef.current) {
+                    if (audioElementRef.current.paused) {
+                        await audioElementRef.current.play();
+                        setIsPlaying(true);
+                    } else {
+                        audioElementRef.current.pause();
+                        setIsPlaying(false);
+                    }
+                } else if (audioBufferRef.current && audioContextRef.current) {
                     if (audioContextRef.current.state === 'suspended') {
                         await audioContextRef.current.resume();
                         setIsPlaying(true);
@@ -307,20 +329,44 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
 
         setIsLoadingAudio(true);
         try {
-            const { audio, cost } = await VoiceService.generateSpeech(chapter.content, selectedVoice);
-
-            if (audio) {
-                deductCredits(cost, "TTS Generation");
-                audioBufferRef.current = audio;
-                playBuffer(audio);
+            const settings = JSON.parse(localStorage.getItem('gerertales_settings') || '{}');
+            if (settings.ttsModel?.includes('eleven')) {
+                const { audio, cost, abort } = await VoiceService.generateSpeechStream(chapter.content, selectedVoice);
+                if (audio) {
+                    streamAbortRef.current = abort || null;
+                    bindStreamAudio(audio);
+                    audioElementRef.current = audio;
+                    deductCredits(cost, "TTS Generation");
+                    await audio.play();
+                } else {
+                    notify("Could not stream speech. Please check your connection.");
+                }
             } else {
-                notify("Could not generate speech. Please check your connection.");
+                const { audio, cost } = await VoiceService.generateSpeech(chapter.content, selectedVoice);
+                if (audio) {
+                    deductCredits(cost, "TTS Generation");
+                    audioBufferRef.current = audio;
+                    playBuffer(audio);
+                } else {
+                    notify("Could not generate speech. Please check your connection.");
+                }
             }
         } catch (e) {
             console.error("Audio playback error", e);
         } finally {
             setIsLoadingAudio(false);
         }
+    };
+
+    const bindStreamAudio = (audio: HTMLAudioElement) => {
+        audio.onplay = () => { setIsPlaying(true); setPlaybackProgress(0); };
+        audio.onpause = () => { setIsPlaying(false); };
+        audio.onended = () => { setIsPlaying(false); setPlaybackProgress(100); };
+        audio.ontimeupdate = () => {
+            if (!audio.duration || Number.isNaN(audio.duration)) return;
+            const p = Math.min((audio.currentTime / audio.duration) * 100, 100);
+            setPlaybackProgress(p);
+        };
     };
 
     const playBuffer = (buffer: AudioBuffer, offset: number = 0) => {
@@ -376,7 +422,12 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
         const newProgress = parseFloat(e.target.value);
         setPlaybackProgress(newProgress);
 
-        if (ttsProvider === 'ai' && audioBufferRef.current) {
+        if (ttsProvider === 'ai' && audioElementRef.current && audioElementRef.current.duration) {
+            const duration = audioElementRef.current.duration;
+            if (!Number.isNaN(duration) && duration > 0) {
+                audioElementRef.current.currentTime = (newProgress / 100) * duration;
+            }
+        } else if (ttsProvider === 'ai' && audioBufferRef.current) {
             const duration = audioBufferRef.current.duration;
             const offset = (newProgress / 100) * duration;
             playBuffer(audioBufferRef.current, offset);
@@ -392,6 +443,19 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
             if (parsed.ttsModel && (parsed.ttsModel.startsWith('tts') || parsed.ttsModel.includes('openai'))) return VOICE_LISTS.openai.map((v: any) => v.name);
         }
         return VOICE_LISTS.gemini.map((v: any) => v.name);
+    };
+
+    const applyNarrationPreset = () => {
+        const nextSettings = {
+            ...JSON.parse(localStorage.getItem('gerertales_settings') || '{}'),
+            ttsProvider: 'ai',
+            ttsModel: 'eleven_v3'
+        };
+        localStorage.setItem('gerertales_settings', JSON.stringify(nextSettings));
+        setTtsProvider('ai');
+        const voices = getElevenLabsVoices();
+        if (voices.length > 0) setSelectedVoice(voices[0].name);
+        stopAudio();
     };
 
     // Export handlers
@@ -923,6 +987,12 @@ const StoryBlueprint: React.FC<StoryBlueprintProps> = ({
                                             ))}
                                         </div>
                                     </div>
+                                    <button
+                                        onClick={applyNarrationPreset}
+                                        className="w-full py-2 rounded-xl border border-cobalt/30 text-[9px] font-black uppercase tracking-[0.2em] text-cobalt hover:bg-cobalt/10 transition-all"
+                                    >
+                                        Narration Preset (Eleven v3)
+                                    </button>
                                 </div>
                             </div>
                         )}

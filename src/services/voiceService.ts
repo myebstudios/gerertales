@@ -51,6 +51,11 @@ export const getElevenLabsVoices = (): { name: string; id: string }[] => {
     return [...VOICE_LISTS.elevenlabs, ...africanVoices];
 };
 
+const resolveElevenLabsVoice = (voiceName: string) => {
+    const voices = getElevenLabsVoices();
+    return voices.find(v => v.name === voiceName) || voices[0];
+};
+
 const chunkText = (text: string, maxLength: number = 4000): string[] => {
     if (text.length <= maxLength) return [text];
     const chunks: string[] = [];
@@ -114,7 +119,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Rachel',
   
   try {
     if (ttsModel.includes('eleven') && elevenLabsApiKey) {
-        const voice = VOICE_LISTS.elevenlabs.find((v: any) => v.name === voiceName) || VOICE_LISTS.elevenlabs[0];
+        const voice = resolveElevenLabsVoice(voiceName);
         const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}`, {
             method: 'POST',
             headers: {
@@ -123,7 +128,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Rachel',
             },
             body: JSON.stringify({
                 text: text,
-                model_id: "eleven_multilingual_v2",
+                model_id: ttsModel,
                 voice_settings: { stability: 0.5, similarity_boost: 0.75 }
             })
         });
@@ -182,4 +187,81 @@ export const generateSpeech = async (text: string, voiceName: string = 'Rachel',
   } catch (error) {
     return { audio: null, cost: 0 };
   }
+};
+
+export const generateSpeechStream = async (
+    text: string,
+    voiceName: string = 'Rachel',
+    tier: string = 'free'
+): Promise<{ audio: HTMLAudioElement | null; cost: number; abort?: () => void }> => {
+    const { ttsModel, elevenLabsApiKey } = getConfig(tier);
+    if (!ttsModel.includes('eleven') || !elevenLabsApiKey) {
+        return { audio: null, cost: 0 };
+    }
+
+    const voice = resolveElevenLabsVoice(voiceName);
+    const controller = new AbortController();
+
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}/stream`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'xi-api-key': elevenLabsApiKey
+        },
+        body: JSON.stringify({
+            text: text,
+            model_id: ttsModel,
+            voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+            output_format: "mp3_44100_128"
+        }),
+        signal: controller.signal
+    });
+
+    if (!response.ok || !response.body) {
+        return { audio: null, cost: 0 };
+    }
+
+    const mediaSource = new MediaSource();
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = URL.createObjectURL(mediaSource);
+
+    const appendChunk = (sourceBuffer: SourceBuffer, chunk: Uint8Array) =>
+        new Promise<void>((resolve, reject) => {
+            const onError = () => {
+                sourceBuffer.removeEventListener('error', onError);
+                sourceBuffer.removeEventListener('updateend', onUpdate);
+                reject(new Error("SourceBuffer error"));
+            };
+            const onUpdate = () => {
+                sourceBuffer.removeEventListener('error', onError);
+                sourceBuffer.removeEventListener('updateend', onUpdate);
+                resolve();
+            };
+            sourceBuffer.addEventListener('error', onError);
+            sourceBuffer.addEventListener('updateend', onUpdate);
+            sourceBuffer.appendBuffer(chunk);
+        });
+
+    mediaSource.addEventListener('sourceopen', async () => {
+        if (!response.body) return;
+        const sourceBuffer = mediaSource.addSourceBuffer('audio/mpeg');
+        const reader = response.body.getReader();
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                if (value && value.byteLength > 0) {
+                    await appendChunk(sourceBuffer, value);
+                }
+            }
+        } catch (e) {
+            // Ignore stream aborts
+        } finally {
+            try { mediaSource.endOfStream(); } catch (e) { }
+        }
+    }, { once: true });
+
+    const cost = Math.round((text.length * RATE_ELEVENLABS_CHAR) * 100) / 100;
+    return { audio, cost, abort: () => controller.abort() };
 };
