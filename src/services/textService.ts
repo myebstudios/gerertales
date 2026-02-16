@@ -157,23 +157,41 @@ export const generateStoryArchitecture = async (
 
 export const generateProse = async (
   history: { role: string; text: string }[],
-  currentChapter: Chapter,
-  format: StoryFormat,
+  story: Story,
   instruction: string,
   tier: string = 'free'
 ): Promise<{ text: string, cost: number }> => {
   const { xai, textModel } = getConfig(tier);
+  const currentChapter = story.toc[story.activeChapterIndex];
+
+  const charactersContext = story.characters.map(c => `${c.name} (${c.role}): ${c.trait}. ${c.description || ''}`).join('\n');
+  const locationsContext = story.locations.map(l => `${l.name}: ${l.description}`).join('\n');
+  const outlineContext = story.toc.map(c => `CH ${c.chapter}: ${c.title} - ${c.summary}`).join('\n');
 
   const context = `
-    Current Chapter: ${currentChapter.title}
-    Summary: ${currentChapter.summary}
-    Current Draft: ${currentChapter.content}
-    Format: ${format}
+    Story Title: ${story.title}
+    Story Spark: ${story.spark}
+    Atmosphere: ${story.tone}
+    Format: ${story.format}
+
+    Dramatis Personae:
+    ${charactersContext}
+
+    World Atlas:
+    ${locationsContext}
+
+    Overall Narrative Arc:
+    ${outlineContext}
+
+    ---
+    Currently Writing: Chapter ${currentChapter.chapter}: ${currentChapter.title}
+    Chapter Summary: ${currentChapter.summary}
+    Current Draft Content: ${currentChapter.content}
   `;
 
   // Format-specific writing instructions
   let formatInstruction = "";
-  switch (format) {
+  switch (story.format) {
     case 'Screenplay':
       formatInstruction = `Write in STANDARD SCREENPLAY FORMAT:
 - Scene headings (INT./EXT. LOCATION - TIME)
@@ -234,7 +252,7 @@ export const generateProse = async (
     Instruction: ${instruction}
     ${formatInstruction}
     
-    Output ONLY the ${format} content. Match the format precisely.
+    Output ONLY the ${story.format} content. Match the format precisely.
   `;
 
   if (textModel === 'local-gemma') {
@@ -248,7 +266,7 @@ export const generateProse = async (
     role: msg.role === 'model' ? 'assistant' : 'user',
     content: msg.text
   }));
-  messages.unshift({ role: "system", content: `You are a co-writer specializing in ${format} writing. Match the format conventions precisely. Be creative and consistent with the established world.` });
+  messages.unshift({ role: "system", content: `You are a co-writer specializing in ${story.format} writing. Match the format conventions precisely. Be creative and consistent with the established world.` });
   messages.push({ role: "user", content: prompt });
 
   const response = await xai.chat.completions.create({

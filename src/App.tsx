@@ -240,7 +240,7 @@ const App: React.FC = () => {
   const handleSendMessage = async (text: string) => {
     if (!currentStory) return;
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text };
-    const currentMessages = [...messages, userMsg];
+    let currentMessages = [...messages, userMsg];
     setMessages(currentMessages);
     setIsAiProcessing(true);
 
@@ -254,24 +254,30 @@ const App: React.FC = () => {
       if (isProse) {
         const { text: prose, cost } = await TextService.generateProse(
           currentMessages.map(m => ({ role: m.role, text: m.text })),
-          currentChapter,
-          currentStory.format,
+          currentStory, // Pass the whole story for context awareness
           text,
           userTier
         );
         await deductCredits(user, cost, "Prose Generation");
-        updateStoryContent(user, currentStory.id, currentStory.activeChapterIndex, currentContent ? `${currentContent}\n\n${prose}` : prose);
-        setMessages([...currentMessages, { id: crypto.randomUUID(), role: 'model', text: "I've added that to the draft. How does it feel?" }]);
+        
+        const assistantMsg: Message = { id: crypto.randomUUID(), role: 'model', text: "I've added that to the draft. How does it feel?" };
+        currentMessages = [...currentMessages, assistantMsg];
+        
+        // Use the new sequence to persist both content and history
+        await updateStoryContent(user, currentStory.id, currentStory.activeChapterIndex, currentContent ? `${currentContent}\n\n${prose}` : prose);
+        await updateStoryMessages(user, currentStory.id, currentMessages);
       } else {
         const { text: response, cost } = await TextService.generateProse(
           currentMessages.map(m => ({ role: m.role, text: m.text })),
-          currentChapter,
-          currentStory.format,
+          currentStory, // Pass the whole story
           "Provide brief advice. Do not write prose.",
           userTier
         );
         await deductCredits(user, cost, "Chat");
-        setMessages([...currentMessages, { id: crypto.randomUUID(), role: 'model', text: response }]);
+        
+        const assistantMsg: Message = { id: crypto.randomUUID(), role: 'model', text: response };
+        currentMessages = [...currentMessages, assistantMsg];
+        await updateStoryMessages(user, currentStory.id, currentMessages);
       }
     } catch (error) {
       setMessages([...currentMessages, { id: crypto.randomUUID(), role: 'model', text: "Connection error." }]);

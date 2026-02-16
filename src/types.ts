@@ -43,6 +43,7 @@ export interface Story {
   likesCount?: number;
   ratingAverage?: number;
   commentsCount?: number;
+  messages?: Message[]; // Persisted chat history
 }
 
 export interface StoryComment {

@@ -28,6 +28,7 @@ interface StoryState {
   loadUserContent: (user: User) => Promise<void>;
   createStory: (user: User | null, config: StoryConfig, blueprint: StoryBlueprintData) => Promise<string>;
   updateStoryContent: (user: User | null, storyId: string, chapterIndex: number, content: string) => Promise<void>;
+  updateStoryMessages: (user: User | null, storyId: string, messages: Message[]) => Promise<void>;
   deductCredits: (user: User | null, amount: number, feature: string) => Promise<boolean>;
   fetchNotifications: (userId: string) => Promise<void>;
   markAsRead: (notificationId: string) => Promise<void>;
@@ -52,6 +53,15 @@ export const useStore = create<StoryState>((set, get) => ({
     notifications, 
     unreadNotificationsCount: notifications.filter(n => !n.isRead).length 
   }),
+
+  setActiveStoryId: (id) => {
+    const { stories } = get();
+    const story = stories.find(s => s.id === id);
+    set({ 
+      activeStoryId: id,
+      messages: story?.messages || [] 
+    });
+  },
 
   loadUserContent: async (user) => {
     const profile = await supabaseService.getProfile(user.id);
@@ -209,6 +219,23 @@ export const useStore = create<StoryState>((set, get) => ({
     set({ stories: updatedStories });
 
     // CRITICAL FIX: Save to localStorage for guest users
+    if (!user) {
+      localStorage.setItem('gerertales_stories', JSON.stringify(updatedStories));
+    }
+
+    if (user) await supabaseService.saveStory(user.id, updatedStory);
+  },
+
+  updateStoryMessages: async (user, storyId, messages) => {
+    const { stories } = get();
+    const story = stories.find(s => s.id === storyId);
+    if (!story) return;
+
+    const updatedStory = { ...story, messages, lastModified: Date.now() };
+    const updatedStories = stories.map(s => s.id === storyId ? updatedStory : s);
+    
+    set({ stories: updatedStories, messages });
+
     if (!user) {
       localStorage.setItem('gerertales_stories', JSON.stringify(updatedStories));
     }

@@ -226,7 +226,8 @@ export const supabaseService = {
       cover_image: story.coverImage,
       collection: story.collection,
       is_public: story.isPublic || false,
-      published_at: story.publishedAt ? new Date(story.publishedAt).toISOString() : null
+      published_at: story.publishedAt ? new Date(story.publishedAt).toISOString() : null,
+      messages: story.messages || []
     };
 
     console.log("Saving story to Supabase:", storyData.id);
@@ -327,7 +328,8 @@ export const supabaseService = {
       coverImage: s.cover_image,
       collection: s.collection,
       isPublic: s.is_public,
-      publishedAt: s.published_at ? new Date(s.published_at).getTime() : undefined
+      publishedAt: s.published_at ? new Date(s.published_at).getTime() : undefined,
+      messages: s.messages || []
     };
   },
 
