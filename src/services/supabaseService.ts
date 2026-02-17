@@ -443,7 +443,7 @@ export const supabaseService = {
       .from('notifications')
       .select(`
         *,
-        actor:profiles!notifications_actor_id_fkey(name, avatar_url),
+        actor:profiles!actor_id(name, avatar_url),
         stories(title)
       `)
       .eq('recipient_id', userId)
@@ -500,7 +500,7 @@ export const supabaseService = {
             .from('notifications')
             .select(`
               *,
-              actor:profiles!notifications_actor_id_fkey(name, avatar_url),
+              actor:profiles!actor_id(name, avatar_url),
               stories(title)
             `)
             .eq('id', payload.new.id)
