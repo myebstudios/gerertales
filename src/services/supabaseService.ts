@@ -439,11 +439,10 @@ export const supabaseService = {
 
   // Social 2.0: Notifications
   async getNotifications(userId: string): Promise<Notification[]> {
-    const { data, error } = await supabase
+    const { data: notifications, error } = await supabase
       .from('notifications')
       .select(`
         *,
-        actor:profiles!actor_id(name, avatar_url),
         stories(title)
       `)
       .eq('recipient_id', userId)
@@ -451,20 +450,33 @@ export const supabaseService = {
       .limit(50);
 
     if (error) throw error;
+    if (!notifications || notifications.length === 0) return [];
 
-    return data.map(n => ({
-      id: n.id,
-      recipientId: n.recipient_id,
-      actorId: n.actor_id,
-      actorName: n.actor?.name,
-      actorAvatar: n.actor?.avatar_url,
-      type: n.type,
-      storyId: n.story_id,
-      storyTitle: n.stories?.title,
-      commentId: n.comment_id,
-      isRead: n.is_read,
-      createdAt: new Date(n.created_at).getTime()
-    }));
+    // Fetch actor profiles manually since the join is failing (likely missing/ambiguous FK in DB)
+    const actorIds = [...new Set(notifications.map(n => n.actor_id))];
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, name, avatar_url')
+      .in('id', actorIds);
+
+    const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+    return notifications.map(n => {
+      const actor = profileMap.get(n.actor_id);
+      return {
+        id: n.id,
+        recipientId: n.recipient_id,
+        actorId: n.actor_id,
+        actorName: actor?.name || 'A Writer',
+        actorAvatar: actor?.avatar_url,
+        type: n.type,
+        storyId: n.story_id,
+        storyTitle: n.stories?.title,
+        commentId: n.comment_id,
+        isRead: n.is_read,
+        createdAt: new Date(n.created_at).getTime()
+      };
+    });
   },
 
   async markNotificationAsRead(notificationId: string) {
@@ -495,30 +507,35 @@ export const supabaseService = {
           filter: `recipient_id=eq.${userId}`
         },
         async (payload) => {
-          // Fetch the full record with joins (actor and story title)
-          const { data, error } = await supabase
+          // Fetch the full record and actor profile manually
+          const { data: n, error: nError } = await supabase
             .from('notifications')
             .select(`
               *,
-              actor:profiles!actor_id(name, avatar_url),
               stories(title)
             `)
             .eq('id', payload.new.id)
             .single();
 
-          if (!error && data) {
+          if (!nError && n) {
+            const { data: actor } = await supabase
+              .from('profiles')
+              .select('name, avatar_url')
+              .eq('id', n.actor_id)
+              .single();
+
             onNewNotification({
-              id: data.id,
-              recipientId: data.recipient_id,
-              actorId: data.actor_id,
-              actorName: data.actor?.name,
-              actorAvatar: data.actor?.avatar_url,
-              type: data.type,
-              storyId: data.story_id,
-              storyTitle: data.stories?.title,
-              commentId: data.comment_id,
-              isRead: data.is_read,
-              createdAt: new Date(data.created_at).getTime()
+              id: n.id,
+              recipientId: n.recipient_id,
+              actorId: n.actor_id,
+              actorName: actor?.name || 'A Writer',
+              actorAvatar: actor?.avatar_url,
+              type: n.type,
+              storyId: n.story_id,
+              storyTitle: n.stories?.title,
+              commentId: n.comment_id,
+              isRead: n.is_read,
+              createdAt: new Date(n.created_at).getTime()
             });
           }
         }
