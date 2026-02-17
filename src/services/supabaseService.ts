@@ -191,7 +191,7 @@ export const supabaseService = {
 
     if (error) throw error;
 
-    return data.map(s => this._mapStory(s));
+    return data.map(s => this._mapStory(s)).filter(s => s !== null);
   },
 
   async getAllStoriesAdmin(): Promise<Story[]> {
@@ -205,7 +205,7 @@ export const supabaseService = {
 
     if (error) throw error;
 
-    return data.map(s => this._mapStory(s));
+    return data.map(s => this._mapStory(s)).filter(s => s !== null);
   },
 
   async saveStory(userId: string, story: Story) {
@@ -274,7 +274,7 @@ export const supabaseService = {
         throw error;
       }
 
-      return data.map(s => this._mapStory(s));
+      return data.map(s => this._mapStory(s)).filter(s => s !== null);
     } catch (e) {
       console.error("Public fetch failed:", e);
       return [];
@@ -297,6 +297,8 @@ export const supabaseService = {
     if (error || !data) return null;
 
     const mapped = this._mapStory(data);
+    if (!mapped) return null;
+
     const ratings = data.story_ratings || [];
     const avg = ratings.length > 0
       ? ratings.reduce((acc: number, r: any) => acc + r.rating, 0) / ratings.length
@@ -311,6 +313,7 @@ export const supabaseService = {
   },
 
   _mapStory(s: any): Story {
+    if (!s) return null as any;
     return {
       id: s.id,
       ownerId: s.owner_id,
@@ -573,7 +576,10 @@ export const supabaseService = {
 
     if (error) throw error;
 
-    return data.map((item: any) => this._mapStory(item.stories));
+    // Filter out any saves where the linked story might have been deleted
+    return data
+      .filter((item: any) => item.stories !== null)
+      .map((item: any) => this._mapStory(item.stories));
   },
 
   // Image Management
